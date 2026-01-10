@@ -1,0 +1,61 @@
+{
+  "name": "@revenium/claude-code-metering",
+  "version": "0.1.0",
+  "description": "CLI tool to configure Claude Code telemetry export to Revenium",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "revenium-metering": "dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "cli": "node dist/cli/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "revenium",
+    "claude-code",
+    "metering",
+    "telemetry",
+    "opentelemetry",
+    "otlp"
+  ],
+  "author": "Revenium",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/revenium/revenium-claude-code-sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/revenium/revenium-claude-code-sdk/issues"
+  },
+  "homepage": "https://github.com/revenium/revenium-claude-code-sdk#readme",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "inquirer": "^9.3.7",
+    "ora": "^8.1.1"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^9.0.7",
+    "@types/node": "^20.17.12",
+    "eslint": "^8.57.1",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
