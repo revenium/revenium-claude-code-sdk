@@ -1,7 +1,10 @@
-import { API_KEY_PREFIX, SUBSCRIPTION_TIER_CONFIG } from '../../utils/constants.js';
+import {
+  API_KEY_PREFIX,
+  SUBSCRIPTION_TIER_CONFIG,
+} from "../../utils/constants.js";
 
 const VALID_TIERS = Object.keys(SUBSCRIPTION_TIER_CONFIG);
-import type { ReveniumConfig, ValidationResult } from '../../types/index.js';
+import type { ReveniumConfig, ValidationResult } from "../../types/index.js";
 
 /**
  * Validates that an API key has the correct format.
@@ -10,8 +13,8 @@ import type { ReveniumConfig, ValidationResult } from '../../types/index.js';
 export function validateApiKey(apiKey: string): ValidationResult {
   const errors: string[] = [];
 
-  if (!apiKey || apiKey.trim() === '') {
-    errors.push('API key is required');
+  if (!apiKey || apiKey.trim() === "") {
+    errors.push("API key is required");
     return { valid: false, errors };
   }
 
@@ -20,14 +23,14 @@ export function validateApiKey(apiKey: string): ValidationResult {
   }
 
   // Check for at least two underscores (hak_tenant_random)
-  const parts = apiKey.split('_');
+  const parts = apiKey.split("_");
   if (parts.length < 3) {
-    errors.push('API key format should be: hak_{tenant}_{key}');
+    errors.push("API key format should be: hak_{tenant}_{key}");
   }
 
   // Minimum length check
   if (apiKey.length < 12) {
-    errors.push('API key appears too short');
+    errors.push("API key appears too short");
   }
 
   return {
@@ -42,14 +45,14 @@ export function validateApiKey(apiKey: string): ValidationResult {
 export function validateEmail(email: string): ValidationResult {
   const errors: string[] = [];
 
-  if (!email || email.trim() === '') {
+  if (!email || email.trim() === "") {
     // Email is optional
     return { valid: true, errors: [] };
   }
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
-    errors.push('Invalid email format');
+    errors.push("Invalid email format");
   }
 
   return {
@@ -64,7 +67,7 @@ export function validateEmail(email: string): ValidationResult {
 export function validateSubscriptionTier(tier: string): ValidationResult {
   const errors: string[] = [];
 
-  if (!tier || tier.trim() === '') {
+  if (!tier || tier.trim() === "") {
     // Tier is optional
     return { valid: true, errors: [] };
   }
@@ -72,8 +75,36 @@ export function validateSubscriptionTier(tier: string): ValidationResult {
   const lowerTier = tier.toLowerCase();
   if (!VALID_TIERS.includes(lowerTier)) {
     errors.push(
-      `Invalid subscription tier. Valid options: ${VALID_TIERS.join(', ')}`
+      `Invalid subscription tier. Valid options: ${VALID_TIERS.join(", ")}`
     );
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+/**
+ * Validates an endpoint URL and ensures it uses HTTPS.
+ */
+export function validateEndpointUrl(endpoint: string): ValidationResult {
+  const errors: string[] = [];
+
+  if (!endpoint || endpoint.trim() === "") {
+    errors.push("Endpoint URL is required");
+    return { valid: false, errors };
+  }
+
+  try {
+    const url = new URL(endpoint);
+    if (url.protocol !== "https:") {
+      errors.push(
+        "Insecure endpoint: HTTPS is required. Only HTTPS endpoints are allowed."
+      );
+    }
+  } catch {
+    errors.push("Invalid endpoint URL format");
   }
 
   return {
@@ -85,13 +116,15 @@ export function validateSubscriptionTier(tier: string): ValidationResult {
 /**
  * Validates a complete Revenium configuration.
  */
-export function validateConfig(config: Partial<ReveniumConfig>): ValidationResult {
+export function validateConfig(
+  config: Partial<ReveniumConfig>
+): ValidationResult {
   const allErrors: string[] = [];
 
-  const apiKeyResult = validateApiKey(config.apiKey || '');
+  const apiKeyResult = validateApiKey(config.apiKey || "");
   allErrors.push(...apiKeyResult.errors);
 
-  const emailResult = validateEmail(config.email || '');
+  const emailResult = validateEmail(config.email || "");
   allErrors.push(...emailResult.errors);
 
   if (config.subscriptionTier) {
@@ -99,15 +132,8 @@ export function validateConfig(config: Partial<ReveniumConfig>): ValidationResul
     allErrors.push(...tierResult.errors);
   }
 
-  if (!config.endpoint || config.endpoint.trim() === '') {
-    allErrors.push('Endpoint URL is required');
-  } else {
-    try {
-      new URL(config.endpoint);
-    } catch {
-      allErrors.push('Invalid endpoint URL format');
-    }
-  }
+  const endpointResult = validateEndpointUrl(config.endpoint || "");
+  allErrors.push(...endpointResult.errors);
 
   return {
     valid: allErrors.length === 0,

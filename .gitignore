@@ -1,9 +1,6 @@
 # Dependencies
 node_modules/
 
-# Build output
-dist/
-
 # IDE
 .idea/
 .vscode/
@@ -25,3 +22,23 @@ npm-debug.log*
 .env
 .env.local
 .env.*.local
+
+# TypeScript cache
+*.tsbuildinfo
+
+# ESLint cache
+.eslintcache
+
+# Temporary files
+*.tmp
+*.temp
+
+# Claude Code internal files (security)
+.claude/
+.augment/
+
+# Test files (internal only)
+*.test.ts
+*.spec.ts
+__tests__/
+tests/

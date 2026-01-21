@@ -1,4 +1,4 @@
-import type { ShellType, ShellUpdateResult } from '../../types/index.js';
+import type { ShellType, ShellUpdateResult } from "../../types/index.js";
 /**
  * Updates the shell profile to source the Revenium configuration file.
  * Returns details about the update operation.

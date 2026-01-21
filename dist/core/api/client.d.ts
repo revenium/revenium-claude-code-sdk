@@ -1,22 +1,23 @@
-import type { OTLPMetricsPayload, OTLPResponse, HealthCheckResult } from '../../types/index.js';
+import type { OTLPLogsPayload, OTLPResponse, HealthCheckResult } from "../../types/index.js";
 /**
- * Sends an OTLP metrics payload to the Revenium endpoint.
- * Posts to /meter/v2/otel/v1/metrics with OTEL Metrics format.
+ * Sends an OTLP logs payload to the Revenium endpoint.
  */
-export declare function sendOtlpMetrics(baseEndpoint: string, apiKey: string, payload: OTLPMetricsPayload): Promise<OTLPResponse>;
+export declare function sendOtlpLogs(baseEndpoint: string, apiKey: string, payload: OTLPLogsPayload): Promise<OTLPResponse>;
 /**
  * Options for creating a test payload.
  */
 export interface TestPayloadOptions {
+    /** Optional subscriber email for attribution */
+    email?: string;
     /** Optional organization ID to attribute costs to */
     organizationId?: string;
     /** Optional product ID to attribute costs to */
     productId?: string;
 }
 /**
- * Creates a minimal test OTEL metrics payload.
+ * Creates a minimal test OTLP logs payload.
  */
-export declare function createTestPayload(sessionId: string, options?: TestPayloadOptions): OTLPMetricsPayload;
+export declare function createTestPayload(sessionId: string, options?: TestPayloadOptions): OTLPLogsPayload;
 /**
  * Generates a unique session ID for test payloads.
  */

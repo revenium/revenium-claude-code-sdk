@@ -1,4 +1,4 @@
-import type { ReveniumConfig } from '../../types/index.js';
+import type { ReveniumConfig } from "../../types/index.js";
 /**
  * Gets the path to the Revenium configuration file.
  */
@@ -8,6 +8,10 @@ export declare function getConfigPath(): string;
  */
 export declare function configExists(): boolean;
 /**
+ * Parses an .env file content into key-value pairs.
+ */
+export declare function parseEnvContent(content: string): Record<string, string>;
+/**
  * Loads the Revenium configuration from the .env file.
  * Returns null if the file doesn't exist.
  */
@@ -16,18 +20,6 @@ export declare function loadConfig(): Promise<ReveniumConfig | null>;
  * Checks if the environment variables are currently loaded in the shell.
  */
 export declare function isEnvLoaded(): boolean;
-/**
- * Migration status for config file updates.
- */
-export interface MigrationStatus {
-    needsMigration: boolean;
-    issues: string[];
-}
-/**
- * Checks if the config file needs migration from old format.
- * Detects: OTEL_LOGS_EXPORTER (should be OTEL_METRICS_EXPORTER)
- */
-export declare function checkMigrationStatus(): Promise<MigrationStatus>;
 /**
  * Gets the full OTLP endpoint URL from a base URL.
  */

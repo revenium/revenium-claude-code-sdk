@@ -1,4 +1,4 @@
-import type { ReveniumConfig } from '../../types/index.js';
+import type { ReveniumConfig } from "../../types/index.js";
 /**
  * Writes the Revenium configuration to ~/.claude/revenium.env.
  * Creates the directory if it doesn't exist and sets file permissions to 600.

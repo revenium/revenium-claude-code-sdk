@@ -1,15 +1,15 @@
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { readFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import {
   CLAUDE_CONFIG_DIR,
   REVENIUM_ENV_FILE,
   ENV_VARS,
   OTLP_PATH,
-} from '../../utils/constants.js';
-import type { ReveniumConfig } from '../../types/index.js';
-import type { SubscriptionTier } from '../../utils/constants.js';
+} from "../../utils/constants.js";
+import type { ReveniumConfig } from "../../types/index.js";
+import type { SubscriptionTier } from "../../utils/constants.js";
 
 /**
  * Gets the path to the Revenium configuration file.
@@ -28,23 +28,23 @@ export function configExists(): boolean {
 /**
  * Parses an .env file content into key-value pairs.
  */
-function parseEnvContent(content: string): Record<string, string> {
+export function parseEnvContent(content: string): Record<string, string> {
   const result: Record<string, string> = {};
 
-  for (const line of content.split('\n')) {
+  for (const line of content.split("\n")) {
     let trimmed = line.trim();
 
     // Skip empty lines and comments
-    if (!trimmed || trimmed.startsWith('#')) {
+    if (!trimmed || trimmed.startsWith("#")) {
       continue;
     }
 
     // Handle 'export' prefix
-    if (trimmed.startsWith('export ')) {
+    if (trimmed.startsWith("export ")) {
       trimmed = trimmed.substring(7).trim();
     }
 
-    const equalsIndex = trimmed.indexOf('=');
+    const equalsIndex = trimmed.indexOf("=");
     if (equalsIndex === -1) {
       continue;
     }
@@ -52,12 +52,19 @@ function parseEnvContent(content: string): Record<string, string> {
     const key = trimmed.substring(0, equalsIndex).trim();
     let value = trimmed.substring(equalsIndex + 1).trim();
 
-    // Remove surrounding quotes if present
+    // Remove surrounding quotes if present and unescape
     if (
       (value.startsWith('"') && value.endsWith('"')) ||
       (value.startsWith("'") && value.endsWith("'"))
     ) {
       value = value.substring(1, value.length - 1);
+      // Unescape common shell escape sequences
+      value = value
+        .replace(/\\"/g, '"')
+        .replace(/\\'/g, "'")
+        .replace(/\\\$/g, "$")
+        .replace(/\\`/g, "`")
+        .replace(/\\\\/g, "\\");
     }
 
     result[key] = value;
@@ -85,8 +92,8 @@ function extractBaseEndpoint(fullEndpoint: string): string {
     // Remove the OTLP path suffix to get the base URL
     // Handle both old path (/meter/v2/ai/otlp) and new path (/meter/v2/otlp)
     const path = url.pathname;
-    if (path.includes('/meter/v2/otlp') || path.includes('/meter/v2/ai/otlp')) {
-      url.pathname = '';
+    if (path.includes("/meter/v2/otlp") || path.includes("/meter/v2/ai/otlp")) {
+      url.pathname = "";
     }
     return url.origin;
   } catch {
@@ -106,11 +113,11 @@ export async function loadConfig(): Promise<ReveniumConfig | null> {
   }
 
   try {
-    const content = await readFile(configPath, 'utf-8');
+    const content = await readFile(configPath, "utf-8");
     const env = parseEnvContent(content);
 
-    const fullEndpoint = env[ENV_VARS.OTLP_ENDPOINT] || '';
-    const headers = env[ENV_VARS.OTLP_HEADERS] || '';
+    const fullEndpoint = env[ENV_VARS.OTLP_ENDPOINT] || "";
+    const headers = env[ENV_VARS.OTLP_HEADERS] || "";
     const apiKey = extractApiKeyFromHeaders(headers);
 
     if (!apiKey) {
@@ -119,14 +126,21 @@ export async function loadConfig(): Promise<ReveniumConfig | null> {
 
     // Parse cost multiplier override if present
     const costMultiplierStr = env[ENV_VARS.COST_MULTIPLIER];
-    const costMultiplierOverride = costMultiplierStr ? parseFloat(costMultiplierStr) : undefined;
+    const costMultiplierOverride = costMultiplierStr
+      ? parseFloat(costMultiplierStr)
+      : undefined;
 
     return {
       apiKey,
       endpoint: extractBaseEndpoint(fullEndpoint),
       email: env[ENV_VARS.SUBSCRIBER_EMAIL],
-      subscriptionTier: env[ENV_VARS.SUBSCRIPTION] as SubscriptionTier | undefined,
-      costMultiplierOverride: costMultiplierOverride && !isNaN(costMultiplierOverride) ? costMultiplierOverride : undefined,
+      subscriptionTier: env[ENV_VARS.SUBSCRIPTION] as
+        | SubscriptionTier
+        | undefined,
+      costMultiplierOverride:
+        costMultiplierOverride !== undefined && !isNaN(costMultiplierOverride)
+          ? costMultiplierOverride
+          : undefined,
       organizationId: env[ENV_VARS.ORGANIZATION_ID],
       productId: env[ENV_VARS.PRODUCT_ID],
     };
@@ -140,51 +154,9 @@ export async function loadConfig(): Promise<ReveniumConfig | null> {
  */
 export function isEnvLoaded(): boolean {
   return (
-    process.env[ENV_VARS.TELEMETRY_ENABLED] === '1' &&
+    process.env[ENV_VARS.TELEMETRY_ENABLED] === "1" &&
     !!process.env[ENV_VARS.OTLP_ENDPOINT]
   );
-}
-
-/**
- * Migration status for config file updates.
- */
-export interface MigrationStatus {
-  needsMigration: boolean;
-  issues: string[];
-}
-
-/**
- * Checks if the config file needs migration from old format.
- * Detects: OTEL_LOGS_EXPORTER (should be OTEL_METRICS_EXPORTER)
- */
-export async function checkMigrationStatus(): Promise<MigrationStatus> {
-  const configPath = getConfigPath();
-  const issues: string[] = [];
-
-  if (!existsSync(configPath)) {
-    return { needsMigration: false, issues: [] };
-  }
-
-  try {
-    const content = await readFile(configPath, 'utf-8');
-
-    // Check for old OTEL_LOGS_EXPORTER (should be OTEL_METRICS_EXPORTER)
-    if (content.includes('OTEL_LOGS_EXPORTER')) {
-      issues.push('Config uses OTEL_LOGS_EXPORTER (should be OTEL_METRICS_EXPORTER)');
-    }
-
-    // Check for old endpoint path
-    if (content.includes('/meter/v2/ai/otlp')) {
-      issues.push('Config uses old endpoint path /meter/v2/ai/otlp (should be /meter/v2/otel)');
-    }
-
-    return {
-      needsMigration: issues.length > 0,
-      issues,
-    };
-  } catch {
-    return { needsMigration: false, issues: [] };
-  }
 }
 
 /**
@@ -192,6 +164,6 @@ export async function checkMigrationStatus(): Promise<MigrationStatus> {
  */
 export function getFullOtlpEndpoint(baseUrl: string): string {
   // Remove trailing slash if present
-  const cleanUrl = baseUrl.replace(/\/$/, '');
+  const cleanUrl = baseUrl.replace(/\/$/, "");
   return `${cleanUrl}${OTLP_PATH}`;
 }

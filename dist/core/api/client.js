@@ -1,82 +1,87 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendOtlpMetrics = sendOtlpMetrics;
+exports.sendOtlpLogs = sendOtlpLogs;
 exports.createTestPayload = createTestPayload;
 exports.generateTestSessionId = generateTestSessionId;
 exports.checkEndpointHealth = checkEndpointHealth;
 const loader_js_1 = require("../config/loader.js");
 /**
- * Sends an OTLP metrics payload to the Revenium endpoint.
- * Posts to /meter/v2/otel/v1/metrics with OTEL Metrics format.
+ * Sends an OTLP logs payload to the Revenium endpoint.
  */
-async function sendOtlpMetrics(baseEndpoint, apiKey, payload) {
+async function sendOtlpLogs(baseEndpoint, apiKey, payload) {
     const fullEndpoint = (0, loader_js_1.getFullOtlpEndpoint)(baseEndpoint);
-    const url = `${fullEndpoint}/v1/metrics`;
+    const url = `${fullEndpoint}/v1/logs`;
     const response = await fetch(url, {
-        method: 'POST',
+        method: "POST",
         headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
         },
         body: JSON.stringify(payload),
     });
     if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`OTLP request failed: ${response.status} ${response.statusText} - ${errorText}`);
+        const safeErrorText = errorText.length > 200 ? errorText.substring(0, 200) + "..." : errorText;
+        throw new Error(`OTLP request failed: ${response.status} ${response.statusText} - ${safeErrorText}`);
     }
     return response.json();
 }
 /**
- * Creates a minimal test OTEL metrics payload.
+ * Creates a minimal test OTLP logs payload.
  */
 function createTestPayload(sessionId, options) {
     const now = Date.now() * 1_000_000; // Convert to nanoseconds
-    // Common attributes for all metrics
-    const commonAttributes = [
-        { key: 'ai.transaction_id', value: { stringValue: sessionId } },
-        { key: 'ai.model', value: { stringValue: 'cli-connectivity-test' } },
-        { key: 'ai.provider', value: { stringValue: 'anthropic' } },
+    // Build log record attributes
+    // Note: organization.id and product.id go here because ClaudeCodeMapper reads from log record attrs
+    const logAttributes = [
+        { key: "session.id", value: { stringValue: sessionId } },
+        { key: "model", value: { stringValue: "cli-connectivity-test" } },
+        { key: "input_tokens", value: { stringValue: "0" } },
+        { key: "output_tokens", value: { stringValue: "0" } },
+        { key: "cache_read_tokens", value: { stringValue: "0" } },
+        { key: "cache_creation_tokens", value: { stringValue: "0" } },
+        { key: "cost_usd", value: { stringValue: "0.0" } },
+        { key: "duration_ms", value: { stringValue: "0" } },
     ];
-    // Add optional organization ID
+    // Add optional subscriber/attribution attributes at log record level
+    // (backend ClaudeCodeMapper reads these from log record attrs, not resource attrs)
+    if (options?.email) {
+        logAttributes.push({
+            key: "user.email",
+            value: { stringValue: options.email },
+        });
+    }
     if (options?.organizationId) {
-        commonAttributes.push({ key: 'organization.id', value: { stringValue: options.organizationId } });
+        logAttributes.push({
+            key: "organization.id",
+            value: { stringValue: options.organizationId },
+        });
     }
-    // Add optional product ID
     if (options?.productId) {
-        commonAttributes.push({ key: 'product.id', value: { stringValue: options.productId } });
+        logAttributes.push({
+            key: "product.id",
+            value: { stringValue: options.productId },
+        });
     }
-    // Build resource attributes
-    const resourceAttributes = [
-        { key: 'service.name', value: { stringValue: 'claude-code' } },
-    ];
+    // Build resource attributes (only service.name needed here)
+    const resourceAttributes = [{ key: "service.name", value: { stringValue: "claude-code" } }];
     return {
-        resourceMetrics: [
+        resourceLogs: [
             {
                 resource: {
                     attributes: resourceAttributes,
                 },
-                scopeMetrics: [
+                scopeLogs: [
                     {
-                        metrics: [
+                        scope: {
+                            name: "claude_code",
+                            version: "0.1.0",
+                        },
+                        logRecords: [
                             {
-                                name: 'ai.tokens.input',
-                                sum: {
-                                    dataPoints: [{
-                                            attributes: commonAttributes,
-                                            timeUnixNano: now.toString(),
-                                            asInt: 0,
-                                        }],
-                                },
-                            },
-                            {
-                                name: 'ai.tokens.output',
-                                sum: {
-                                    dataPoints: [{
-                                            attributes: commonAttributes,
-                                            timeUnixNano: now.toString(),
-                                            asInt: 0,
-                                        }],
-                                },
+                                timeUnixNano: now.toString(),
+                                body: { stringValue: "claude_code.api_request" },
+                                attributes: logAttributes,
                             },
                         ],
                     },
@@ -101,18 +106,18 @@ async function checkEndpointHealth(baseEndpoint, apiKey, options) {
     try {
         const sessionId = generateTestSessionId();
         const payload = createTestPayload(sessionId, options);
-        const response = await sendOtlpMetrics(baseEndpoint, apiKey, payload);
+        const response = await sendOtlpLogs(baseEndpoint, apiKey, payload);
         const latencyMs = Date.now() - startTime;
         return {
             healthy: true,
             statusCode: 200,
-            message: `Endpoint healthy. Processed ${response.processedMetrics} metric(s).`,
+            message: `Endpoint healthy. Processed ${response.processedEvents} event(s).`,
             latencyMs,
         };
     }
     catch (error) {
         const latencyMs = Date.now() - startTime;
-        const message = error instanceof Error ? error.message : 'Unknown error';
+        const message = error instanceof Error ? error.message : "Unknown error";
         // Try to extract status code from error message
         const statusMatch = message.match(/(\d{3})/);
         const statusCode = statusMatch ? parseInt(statusMatch[1], 10) : undefined;

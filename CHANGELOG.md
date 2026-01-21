@@ -4,47 +4,41 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed
-- **BREAKING**: Changed from `OTEL_LOGS_EXPORTER` to `OTEL_METRICS_EXPORTER` in generated config
-  - If you have an existing `~/.claude/revenium.env`, run `revenium-metering setup` to regenerate it
-  - The `status` command now detects old configs and warns about migration
-
-### Added
-- SDK standardization files (LICENSE, SECURITY.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md, CHANGELOG.md)
-- Examples directory with usage samples
-- Migration detection in `status` command to identify outdated configurations
-- Unit tests for config content generation (OTEL exporter type validation)
-
-## [0.1.0] - 2026-01-05
+## [0.1.1] - 2026-01-21
 
 ### Fixed
-- Changed OTEL endpoint from `/meter/v2/ai/otlp/v1/logs` to `/meter/v2/otel/v1/metrics` (PR #3)
-- Changed payload format from OTEL Logs to OTEL Metrics for correct API compatibility
+
+- Corrected OTLP endpoint path from `/meter/v2/otel` to `/meter/v2/otlp`
+- Changed payload format from OTEL Metrics to OTLP Logs for correct backend compatibility
+- Updated endpoint URL from `/v1/metrics` to `/v1/logs`
+- Fixed response field from `processedMetrics` to `processedEvents`
+
+### Changed
+
+- Updated minimum Node.js version from 18.0.0 to 20.0.0
+- Migrated from OTEL Metrics format to OTLP Logs format
+- Updated test payload structure to match ClaudeCodeMapper backend expectations
+- Added email field support in test payloads for subscriber attribution
 
 ### Added
+
+- New `hashing.ts` utility module for transaction ID generation
+- Support for `user.email` attribute in log records
+- Improved error message truncation (max 200 chars) for better readability
+- SDK standardization files (LICENSE, SECURITY.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md)
+- Examples directory with usage samples
 - Interactive setup wizard (`revenium-metering setup`)
 - Status check command (`revenium-metering status`)
 - Test metric sender (`revenium-metering test`)
+- Backfill command for historical data import (`revenium-metering backfill`)
 - Shell profile auto-detection (bash, zsh, fish)
 - Subscription tier configuration (Pro, Max, Team, Enterprise, API)
 - Cost multiplier calculation based on subscription tier
 - Non-interactive mode with CLI flags
 - Verbose output option for debugging
-
-### Configuration
-- Creates `~/.claude/revenium.env` with OTEL environment variables
+- Creates `~/.claude/revenium.env` with OTLP environment variables
 - Automatic shell profile sourcing configuration
 - Support for custom endpoints (for development/testing)
 
-### Supported Tiers
-| Tier | Cost Multiplier | Effective Discount |
-|------|-----------------|-------------------|
-| Pro | 0.16 | 84% |
-| Max 5x | 0.16 | 84% |
-| Max 20x | 0.08 | 92% |
-| Team Premium | 0.24 | 76% |
-| Enterprise | 0.05 | 95% |
-| API | 1.0 | 0% |
-
-[Unreleased]: https://github.com/revenium/revenium-claude-code-metering/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/revenium/revenium-claude-code-metering/releases/tag/v0.1.0
+[Unreleased]: https://github.com/revenium/revenium-claude-code-sdk/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/revenium/revenium-claude-code-sdk/releases/tag/v0.1.1
