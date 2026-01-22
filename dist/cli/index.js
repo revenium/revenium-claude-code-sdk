@@ -11,7 +11,7 @@ exports.program = new commander_1.Command();
 exports.program
     .name("revenium-metering")
     .description("Configure Claude Code telemetry export to Revenium")
-    .version("0.1.0");
+    .version("0.1.1");
 exports.program
     .command("setup")
     .description("Interactive setup wizard to configure Claude Code metering")

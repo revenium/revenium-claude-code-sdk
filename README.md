@@ -1,7 +1,5 @@
 # @revenium/claude-code-metering
 
-[![CI](https://github.com/revenium/revenium-claude-code-sdk-internal/actions/workflows/ci.yml/badge.svg)](https://github.com/revenium/revenium-claude-code-sdk-internal/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-92.77%25-brightgreen)](https://github.com/revenium/revenium-claude-code-sdk-internal)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -161,13 +159,13 @@ revenium-metering backfill
 
 The setup wizard creates `~/.claude/revenium.env` with the following environment variables:
 
-| Variable                       | Description                                                           |
-| ------------------------------ | --------------------------------------------------------------------- |
-| `CLAUDE_CODE_ENABLE_TELEMETRY` | Enables Claude Code telemetry export (set to `1`)                     |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`  | Revenium OTLP endpoint URL                                            |
-| `OTEL_EXPORTER_OTLP_HEADERS`   | Authentication header with API key                                    |
-| `OTEL_EXPORTER_OTLP_PROTOCOL`  | OTLP protocol (`http/json`)                                           |
-| `OTEL_LOGS_EXPORTER`           | **Required** - Set to `otlp` to enable log export                     |
+| Variable                       | Description                                                                        |
+| ------------------------------ | ---------------------------------------------------------------------------------- |
+| `CLAUDE_CODE_ENABLE_TELEMETRY` | Enables Claude Code telemetry export (set to `1`)                                  |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`  | Revenium OTLP endpoint URL                                                         |
+| `OTEL_EXPORTER_OTLP_HEADERS`   | Authentication header with API key                                                 |
+| `OTEL_EXPORTER_OTLP_PROTOCOL`  | OTLP protocol (`http/json`)                                                        |
+| `OTEL_LOGS_EXPORTER`           | **Required** - Set to `otlp` to enable log export                                  |
 | `OTEL_RESOURCE_ATTRIBUTES`     | Comma-separated key=value pairs (cost_multiplier, organization.name, product.name) |
 
 ### Subscription Tiers
@@ -340,14 +338,14 @@ Go to **Settings** > **Tools** > **Terminal** > **Environment variables** and ad
 
 Configure these environment variables in your IDE's terminal settings:
 
-| Variable                       | Value                                                                    |
-| ------------------------------ | ------------------------------------------------------------------------ |
-| `CLAUDE_CODE_ENABLE_TELEMETRY` | `1`                                                                      |
-| `OTEL_LOGS_EXPORTER`           | `otlp`                                                                   |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`  | `https://api.revenium.ai/meter/v2/otlp`                                  |
-| `OTEL_EXPORTER_OTLP_HEADERS`   | `x-api-key=hak_YOUR_API_KEY`                                             |
-| `OTEL_EXPORTER_OTLP_PROTOCOL`  | `http/json`                                                              |
-| `OTEL_RESOURCE_ATTRIBUTES`     | `cost_multiplier=0.08,organization.name=my-org,product.name=my-product`  |
+| Variable                       | Value                                                                   |
+| ------------------------------ | ----------------------------------------------------------------------- |
+| `CLAUDE_CODE_ENABLE_TELEMETRY` | `1`                                                                     |
+| `OTEL_LOGS_EXPORTER`           | `otlp`                                                                  |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`  | `https://api.revenium.ai/meter/v2/otlp`                                 |
+| `OTEL_EXPORTER_OTLP_HEADERS`   | `x-api-key=hak_YOUR_API_KEY`                                            |
+| `OTEL_EXPORTER_OTLP_PROTOCOL`  | `http/json`                                                             |
+| `OTEL_RESOURCE_ATTRIBUTES`     | `cost_multiplier=0.08,organization.name=my-org,product.name=my-product` |
 
 See [Subscription Tiers](#subscription-tiers) for cost multiplier values and [Organization & Product Attribution](#organization--product-attribution) for attribution options.
 
@@ -407,7 +405,7 @@ Note: The local metering service must be running on port 8082 with Kafka connect
 
 ## Requirements
 
-- Node.js >= 18.0.0
+- Node.js >= 20.0.0
 - Claude Code CLI installed
 - Revenium API key (obtain from app.revenium.ai)
 
