@@ -149,6 +149,8 @@ async function collectConfiguration(options) {
         email: options.email || answers.email || undefined,
         subscriptionTier: (options.tier || answers.tier),
         endpoint,
+        organizationId: options.organizationId,
+        productId: options.productId,
     };
 }
 function printSuccessMessage(config) {
@@ -163,6 +165,12 @@ function printSuccessMessage(config) {
         const tier = config.subscriptionTier;
         const tierConfig = constants_js_1.SUBSCRIPTION_TIER_CONFIG[tier];
         console.log(`  Tier:       ${tierConfig.name}`);
+    }
+    if (config.organizationId) {
+        console.log(`  Organization: ${config.organizationId}`);
+    }
+    if (config.productId) {
+        console.log(`  Product:    ${config.productId}`);
     }
     console.log("\n" + chalk_1.default.yellow.bold("Next steps:"));
     console.log("  1. Restart your terminal or run:");

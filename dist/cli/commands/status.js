@@ -42,10 +42,10 @@ async function statusCommand() {
         console.log(`  Tier:       ${config.subscriptionTier}`);
     }
     if (config.organizationId) {
-        console.log(`  Org ID:     ${config.organizationId}`);
+        console.log(`  Organization: ${config.organizationId}`);
     }
     if (config.productId) {
-        console.log(`  Product ID: ${config.productId}`);
+        console.log(`  Product:    ${config.productId}`);
     }
     // Check if environment is loaded
     console.log('\n' + chalk_1.default.bold('Environment:'));

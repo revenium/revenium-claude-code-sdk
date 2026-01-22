@@ -11,7 +11,7 @@ import { getFullOtlpEndpoint } from "../config/loader.js";
 export async function sendOtlpLogs(
   baseEndpoint: string,
   apiKey: string,
-  payload: OTLPLogsPayload,
+  payload: OTLPLogsPayload
 ): Promise<OTLPResponse> {
   const fullEndpoint = getFullOtlpEndpoint(baseEndpoint);
   const url = `${fullEndpoint}/v1/logs`;
@@ -30,7 +30,7 @@ export async function sendOtlpLogs(
     const safeErrorText =
       errorText.length > 200 ? errorText.substring(0, 200) + "..." : errorText;
     throw new Error(
-      `OTLP request failed: ${response.status} ${response.statusText} - ${safeErrorText}`,
+      `OTLP request failed: ${response.status} ${response.statusText} - ${safeErrorText}`
     );
   }
 
@@ -54,12 +54,12 @@ export interface TestPayloadOptions {
  */
 export function createTestPayload(
   sessionId: string,
-  options?: TestPayloadOptions,
+  options?: TestPayloadOptions
 ): OTLPLogsPayload {
   const now = Date.now() * 1_000_000; // Convert to nanoseconds
 
   // Build log record attributes
-  // Note: organization.id and product.id go here because ClaudeCodeMapper reads from log record attrs
+  // Note: organization.name and product.name go here because ClaudeCodeMapper reads from log record attrs
   const logAttributes: Array<{ key: string; value: { stringValue: string } }> =
     [
       { key: "session.id", value: { stringValue: sessionId } },
@@ -82,13 +82,13 @@ export function createTestPayload(
   }
   if (options?.organizationId) {
     logAttributes.push({
-      key: "organization.id",
+      key: "organization.name",
       value: { stringValue: options.organizationId },
     });
   }
   if (options?.productId) {
     logAttributes.push({
-      key: "product.id",
+      key: "product.name",
       value: { stringValue: options.productId },
     });
   }
@@ -140,7 +140,7 @@ export function generateTestSessionId(): string {
 export async function checkEndpointHealth(
   baseEndpoint: string,
   apiKey: string,
-  options?: TestPayloadOptions,
+  options?: TestPayloadOptions
 ): Promise<HealthCheckResult> {
   const startTime = Date.now();
 

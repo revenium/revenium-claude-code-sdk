@@ -32,7 +32,7 @@ async function sendOtlpLogs(baseEndpoint, apiKey, payload) {
 function createTestPayload(sessionId, options) {
     const now = Date.now() * 1_000_000; // Convert to nanoseconds
     // Build log record attributes
-    // Note: organization.id and product.id go here because ClaudeCodeMapper reads from log record attrs
+    // Note: organization.name and product.name go here because ClaudeCodeMapper reads from log record attrs
     const logAttributes = [
         { key: "session.id", value: { stringValue: sessionId } },
         { key: "model", value: { stringValue: "cli-connectivity-test" } },
@@ -53,13 +53,13 @@ function createTestPayload(sessionId, options) {
     }
     if (options?.organizationId) {
         logAttributes.push({
-            key: "organization.id",
+            key: "organization.name",
             value: { stringValue: options.organizationId },
         });
     }
     if (options?.productId) {
         logAttributes.push({
-            key: "product.id",
+            key: "product.name",
             value: { stringValue: options.productId },
         });
     }

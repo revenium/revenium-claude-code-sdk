@@ -458,13 +458,13 @@ export function createOtlpPayload(
       }
       if (organizationId) {
         attributes.push({
-          key: "organization.id",
+          key: "organization.name",
           value: { stringValue: organizationId },
         });
       }
       if (productId) {
         attributes.push({
-          key: "product.id",
+          key: "product.name",
           value: { stringValue: productId },
         });
       }

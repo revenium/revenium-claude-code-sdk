@@ -102,6 +102,36 @@ function extractBaseEndpoint(fullEndpoint: string): string {
 }
 
 /**
+ * Parses OTEL_RESOURCE_ATTRIBUTES value into key-value pairs.
+ * Format: "key1=value1,key2=value2"
+ */
+function parseOtelResourceAttributes(value: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!value || typeof value !== "string") return result;
+
+  const pairs = value.split(",");
+  for (const pair of pairs) {
+    const trimmed = pair.trim();
+    if (!trimmed) continue;
+
+    const equalsIndex = trimmed.indexOf("=");
+    if (equalsIndex === -1) continue;
+
+    const key = trimmed.substring(0, equalsIndex).trim();
+    let attrValue = trimmed.substring(equalsIndex + 1).trim();
+
+    try {
+      attrValue = decodeURIComponent(attrValue);
+    } catch {
+      // If decoding fails, use raw value
+    }
+
+    if (key) result[key] = attrValue;
+  }
+  return result;
+}
+
+/**
  * Loads the Revenium configuration from the .env file.
  * Returns null if the file doesn't exist.
  */
@@ -130,6 +160,21 @@ export async function loadConfig(): Promise<ReveniumConfig | null> {
       ? parseFloat(costMultiplierStr)
       : undefined;
 
+    // Parse OTEL_RESOURCE_ATTRIBUTES for org/product (primary source)
+    const resourceAttrsStr = env["OTEL_RESOURCE_ATTRIBUTES"] || "";
+    const resourceAttrs = parseOtelResourceAttributes(resourceAttrsStr);
+
+    // Support both .name (preferred) and .id (legacy), with fallback to standalone vars
+    const organizationId =
+      resourceAttrs["organization.name"] ||
+      resourceAttrs["organization.id"] ||
+      env[ENV_VARS.ORGANIZATION_ID];
+
+    const productId =
+      resourceAttrs["product.name"] ||
+      resourceAttrs["product.id"] ||
+      env[ENV_VARS.PRODUCT_ID];
+
     return {
       apiKey,
       endpoint: extractBaseEndpoint(fullEndpoint),
@@ -141,8 +186,8 @@ export async function loadConfig(): Promise<ReveniumConfig | null> {
         costMultiplierOverride !== undefined && !isNaN(costMultiplierOverride)
           ? costMultiplierOverride
           : undefined,
-      organizationId: env[ENV_VARS.ORGANIZATION_ID],
-      productId: env[ENV_VARS.PRODUCT_ID],
+      organizationId,
+      productId,
     };
   } catch {
     return null;

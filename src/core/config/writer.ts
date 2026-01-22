@@ -101,80 +101,77 @@ function generateEnvContent(config: ReveniumConfig): string {
       lines.push("# (custom override applied)");
       lines.push(`export ${ENV_VARS.COST_MULTIPLIER}=${costMultiplier}`);
     }
-    // Build OTEL_RESOURCE_ATTRIBUTES with cost_multiplier and optional fields
-    // Special characters (,=") in values are URL-encoded to ensure safe parsing
+    // Build OTEL_RESOURCE_ATTRIBUTES with cost_multiplier and optional organization.name/product.name.
+    // Special characters (,=") in values are URL-encoded to ensure safe parsing.
+    // Note: The backend ONLY reads organization.name and product.name from resourceAttributes,
+    // ignoring any auto-generated values in log record attributes from Claude Code.
     const resourceAttrs: string[] = [`cost_multiplier=${costMultiplier}`];
     if (config.organizationId) {
       resourceAttrs.push(
-        `organization.id=${escapeResourceAttributeValue(config.organizationId)}`
+        `organization.name=${escapeResourceAttributeValue(config.organizationId)}`
       );
     }
     if (config.productId) {
       resourceAttrs.push(
-        `product.id=${escapeResourceAttributeValue(config.productId)}`
+        `product.name=${escapeResourceAttributeValue(config.productId)}`
       );
     }
     lines.push(`export OTEL_RESOURCE_ATTRIBUTES="${resourceAttrs.join(",")}"`);
   }
 
-  // Add advanced configuration section (commented out by default)
+  // Add advanced configuration section
   lines.push("");
   lines.push(
     "# ─────────────────────────────────────────────────────────────────────────────"
   );
-  lines.push("# Advanced Configuration (Optional)");
+  lines.push("# Organization & Product Attribution (Optional)");
   lines.push(
     "# ─────────────────────────────────────────────────────────────────────────────"
   );
   lines.push("#");
   lines.push(
-    "# IMPORTANT: If you enable organization/product attribution below, you must also"
+    "# To attribute Claude Code costs to a specific organization or product, you must"
   );
   lines.push(
-    "# update OTEL_RESOURCE_ATTRIBUTES above to include them. For example:"
+    "# add them to OTEL_RESOURCE_ATTRIBUTES above. The backend ONLY reads these values"
   );
   lines.push(
-    '#   export OTEL_RESOURCE_ATTRIBUTES="cost_multiplier=0.08,organization.id=my-org,product.id=my-product"'
+    "# from OTEL_RESOURCE_ATTRIBUTES - standalone environment variables are NOT sent."
+  );
+  lines.push("#");
+  lines.push("# HOW TO CONFIGURE:");
+  lines.push(
+    "# Edit the OTEL_RESOURCE_ATTRIBUTES line above to include organization.name and/or product.name:"
+  );
+  lines.push("#");
+
+  // Get current cost multiplier for the example
+  const exampleMultiplier =
+    config.subscriptionTier && config.costMultiplierOverride === undefined
+      ? getCostMultiplier(config.subscriptionTier as SubscriptionTier)
+      : config.costMultiplierOverride ?? "0.08";
+  lines.push(
+    `#   OTEL_RESOURCE_ATTRIBUTES="cost_multiplier=${exampleMultiplier},organization.name=my-org,product.name=my-product"`
+  );
+  lines.push("#");
+  lines.push("# ATTRIBUTE DESCRIPTIONS:");
+  lines.push(
+    "#   organization.name - Attribute costs to a customer/company (e.g., client name, team)"
   );
   lines.push(
-    "# Otherwise, the telemetry sent to Revenium will not include the attribution data."
-  );
-  lines.push(
-    "# Run `npx @revenium/claude-code-metering setup` again to regenerate this file with"
-  );
-  lines.push(
-    "# the correct OTEL_RESOURCE_ATTRIBUTES if you want automatic configuration."
+    "#   product.name      - Attribute costs to a product/project (e.g., mobile-app, backend-api)"
   );
   lines.push("#");
   lines.push(
-    "# Organization ID: Attribute Claude Code costs to a specific customer or company."
+    "# After editing, restart your terminal or run: source ~/.claude/revenium.env"
   );
-  lines.push(
-    "# Use this when you want to track AI development costs by client/organization."
-  );
-  lines.push(
-    "# Example: Your consulting firm tracks costs per client project."
-  );
-  if (config.organizationId) {
-    lines.push(`export ${ENV_VARS.ORGANIZATION_ID}=${config.organizationId}`);
-  } else {
-    lines.push(`# export ${ENV_VARS.ORGANIZATION_ID}=your-organization-id`);
-  }
   lines.push("#");
   lines.push(
-    "# Product ID: Attribute Claude Code costs to a specific product or project."
+    "# Alternatively, re-run setup with --organization and --product flags:"
   );
   lines.push(
-    "# Use this when you want to track AI development costs by internal product."
+    "#   npx @revenium/claude-code-metering setup --organization my-org --product my-product"
   );
-  lines.push(
-    '# Example: Separate AI costs for "mobile-app" vs "backend-api" development.'
-  );
-  if (config.productId) {
-    lines.push(`export ${ENV_VARS.PRODUCT_ID}=${config.productId}`);
-  } else {
-    lines.push(`# export ${ENV_VARS.PRODUCT_ID}=your-product-id`);
-  }
 
   lines.push("");
   return lines.join("\n");

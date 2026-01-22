@@ -26,6 +26,8 @@ interface SetupOptions {
   email?: string;
   tier?: string;
   endpoint?: string;
+  organizationId?: string;
+  productId?: string;
   skipShellUpdate?: boolean;
 }
 
@@ -205,6 +207,8 @@ async function collectConfiguration(
     email: options.email || answers.email || undefined,
     subscriptionTier: (options.tier || answers.tier) as SubscriptionTier,
     endpoint,
+    organizationId: options.organizationId,
+    productId: options.productId,
   };
 }
 
@@ -221,6 +225,12 @@ function printSuccessMessage(config: ReveniumConfig): void {
     const tier = config.subscriptionTier as SubscriptionTier;
     const tierConfig = SUBSCRIPTION_TIER_CONFIG[tier];
     console.log(`  Tier:       ${tierConfig.name}`);
+  }
+  if (config.organizationId) {
+    console.log(`  Organization: ${config.organizationId}`);
+  }
+  if (config.productId) {
+    console.log(`  Product:    ${config.productId}`);
   }
 
   console.log("\n" + chalk.yellow.bold("Next steps:"));
