@@ -1,4 +1,4 @@
-import type { SubscriptionTier } from '../utils/constants.js';
+import type { SubscriptionTier } from "../utils/constants.js";
 
 /**
  * Configuration stored in ~/.claude/revenium.env
@@ -37,7 +37,7 @@ export interface HealthCheckResult {
 /**
  * Shell types supported for profile updates
  */
-export type ShellType = 'bash' | 'zsh' | 'fish' | 'unknown';
+export type ShellType = "bash" | "zsh" | "fish" | "unknown";
 
 /**
  * Result of shell profile update
@@ -50,33 +50,28 @@ export interface ShellUpdateResult {
 }
 
 /**
- * OTEL metrics payload structure (matching backend expectations)
- * Uses OTEL metrics format with sum datapoints for token counts
- * Sent to: POST /meter/v2/otel/v1/metrics
+ * OTLP log payload structure (matching backend expectations)
  */
-export interface OTLPMetricsPayload {
-  resourceMetrics: Array<{
+export interface OTLPLogsPayload {
+  resourceLogs: Array<{
     resource?: {
       attributes?: Array<{
         key: string;
         value: OTLPValue;
       }>;
     };
-    scopeMetrics: Array<{
-      metrics: Array<{
+    scopeLogs: Array<{
+      scope?: {
         name: string;
-        unit?: string;
-        sum: {
-          dataPoints: Array<{
-            attributes?: Array<{
-              key: string;
-              value: OTLPValue;
-            }>;
-            timeUnixNano?: string;
-            asInt?: number;
-            asDouble?: number;
-          }>;
-        };
+        version: string;
+      };
+      logRecords: Array<{
+        timeUnixNano?: string;
+        body: OTLPValue;
+        attributes: Array<{
+          key: string;
+          value: OTLPValue;
+        }>;
       }>;
     }>;
   }>;
@@ -93,11 +88,11 @@ export interface OTLPValue {
 }
 
 /**
- * Response from OTEL metrics endpoint
+ * Response from OTLP endpoint
  */
 export interface OTLPResponse {
   id: string;
   resourceType: string;
-  processedMetrics: number;
+  processedEvents: number;
   created: string;
 }

@@ -42,19 +42,10 @@ async function statusCommand() {
         console.log(`  Tier:       ${config.subscriptionTier}`);
     }
     if (config.organizationId) {
-        console.log(`  Org ID:     ${config.organizationId}`);
+        console.log(`  Organization: ${config.organizationId}`);
     }
     if (config.productId) {
-        console.log(`  Product ID: ${config.productId}`);
-    }
-    // Check for migration issues
-    const migrationStatus = await (0, loader_js_1.checkMigrationStatus)();
-    if (migrationStatus.needsMigration) {
-        console.log('\n' + chalk_1.default.bold.yellow('⚠️  Migration Required:'));
-        for (const issue of migrationStatus.issues) {
-            console.log(chalk_1.default.yellow(`  • ${issue}`));
-        }
-        console.log(chalk_1.default.dim('  Run `revenium-metering setup` to update your configuration.'));
+        console.log(`  Product:    ${config.productId}`);
     }
     // Check if environment is loaded
     console.log('\n' + chalk_1.default.bold('Environment:'));

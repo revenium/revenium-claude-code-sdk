@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import ora from 'ora';
-import { loadConfig, configExists, isEnvLoaded, getConfigPath, checkMigrationStatus } from '../../core/config/loader.js';
+import { loadConfig, configExists, isEnvLoaded, getConfigPath } from '../../core/config/loader.js';
 import { checkEndpointHealth } from '../../core/api/client.js';
 import { maskApiKey, maskEmail } from '../../utils/masking.js';
 import { detectShell, getProfilePath } from '../../core/shell/detector.js';
@@ -43,20 +43,10 @@ export async function statusCommand(): Promise<void> {
     console.log(`  Tier:       ${config.subscriptionTier}`);
   }
   if (config.organizationId) {
-    console.log(`  Org ID:     ${config.organizationId}`);
+    console.log(`  Organization: ${config.organizationId}`);
   }
   if (config.productId) {
-    console.log(`  Product ID: ${config.productId}`);
-  }
-
-  // Check for migration issues
-  const migrationStatus = await checkMigrationStatus();
-  if (migrationStatus.needsMigration) {
-    console.log('\n' + chalk.bold.yellow('⚠️  Migration Required:'));
-    for (const issue of migrationStatus.issues) {
-      console.log(chalk.yellow(`  • ${issue}`));
-    }
-    console.log(chalk.dim('  Run `revenium-metering setup` to update your configuration.'));
+    console.log(`  Product:    ${config.productId}`);
   }
 
   // Check if environment is loaded

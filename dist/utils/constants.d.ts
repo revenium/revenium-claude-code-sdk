@@ -3,8 +3,8 @@
  */
 /** Default Revenium API base URL */
 export declare const DEFAULT_REVENIUM_URL = "https://api.revenium.ai";
-/** Path appended to base URL for OTEL metrics endpoint */
-export declare const OTLP_PATH = "/meter/v2/otel";
+/** Path appended to base URL for OTLP endpoint */
+export declare const OTLP_PATH = "/meter/v2/otlp";
 /** API key prefix required for valid Revenium API keys */
 export declare const API_KEY_PREFIX = "hak_";
 /** Directory for Claude Code configuration */

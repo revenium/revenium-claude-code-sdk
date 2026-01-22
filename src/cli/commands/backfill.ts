@@ -1,20 +1,33 @@
-import { createReadStream } from 'node:fs';
-import { readdir, stat } from 'node:fs/promises';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { createInterface } from 'node:readline';
-import chalk from 'chalk';
-import ora from 'ora';
-import { loadConfig } from '../../core/config/loader.js';
-import { sendOtlpMetrics } from '../../core/api/client.js';
-import { getCostMultiplier, type SubscriptionTier } from '../../utils/constants.js';
-import type { OTLPMetricsPayload } from '../../types/index.js';
+import { createReadStream } from "node:fs";
+import { readdir } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { createInterface } from "node:readline";
+import chalk from "chalk";
+import ora from "ora";
+import { loadConfig } from "../../core/config/loader.js";
+import { sendOtlpLogs } from "../../core/api/client.js";
+import {
+  getCostMultiplier,
+  type SubscriptionTier,
+} from "../../utils/constants.js";
+import { generateTransactionId } from "../../utils/hashing.js";
+import type { OTLPLogsPayload } from "../../types/index.js";
 
 export interface BackfillOptions {
   since?: string;
   dryRun?: boolean;
   batchSize?: number;
+  delay?: number;
   verbose?: boolean;
+}
+
+export interface BackfillDependencies {
+  loadConfig: typeof loadConfig;
+  findJsonlFiles: typeof findJsonlFiles;
+  streamJsonlRecords: typeof streamJsonlRecords;
+  sendBatchWithRetry: typeof sendBatchWithRetry;
+  homedir: typeof homedir;
 }
 
 interface UsageData {
@@ -44,10 +57,114 @@ interface ParsedRecord {
   cacheCreationTokens: number;
 }
 
+interface RetryResult {
+  success: boolean;
+  attempts: number;
+  error?: string;
+}
+
+/**
+ * Sleep for a specified number of milliseconds.
+ */
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Sanitize error message to prevent API key leakage.
+ * Truncates long messages and removes potential sensitive data.
+ */
+export function sanitizeErrorMessage(errorMsg: string): string {
+  const maxLength = 500;
+  let sanitized = errorMsg;
+
+  if (sanitized.length > maxLength) {
+    sanitized = `${sanitized.substring(0, maxLength)}...`;
+  }
+
+  return sanitized;
+}
+
+/**
+ * Check if an error is retryable based on HTTP status code.
+ * 4xx errors (except 429) are not retryable as they indicate client errors.
+ */
+export function isRetryableError(errorMsg: string): boolean {
+  const statusMatch = errorMsg.match(/OTLP request failed: (\d{3})/);
+  if (!statusMatch) {
+    return true;
+  }
+
+  const statusCode = parseInt(statusMatch[1], 10);
+
+  if (statusCode === 429) {
+    return true;
+  }
+
+  if (statusCode >= 400 && statusCode < 500) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Send a batch with retry logic and exponential backoff.
+ */
+export async function sendBatchWithRetry(
+  endpoint: string,
+  apiKey: string,
+  payload: OTLPLogsPayload,
+  maxRetries: number,
+  verbose: boolean,
+): Promise<RetryResult> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      await sendOtlpLogs(endpoint, apiKey, payload);
+      if (verbose && attempt > 0) {
+        console.log(chalk.green(`  ✓ Succeeded after ${attempt + 1} attempts`));
+      }
+      return { success: true, attempts: attempt + 1 };
+    } catch (error) {
+      const rawErrorMsg =
+        error instanceof Error ? error.message : "Unknown error";
+      const errorMsg = sanitizeErrorMessage(rawErrorMsg);
+      const isRetryable = isRetryableError(errorMsg);
+
+      if (!isRetryable) {
+        if (verbose) {
+          console.log(
+            chalk.red(`  ✗ Non-retryable error (client error): ${errorMsg}`),
+          );
+        }
+        return { success: false, attempts: attempt + 1, error: errorMsg };
+      }
+
+      if (attempt < maxRetries - 1) {
+        const backoffDelay = 1000 * Math.pow(2, attempt);
+        if (verbose) {
+          console.log(
+            chalk.yellow(`  ✗ Attempt ${attempt + 1} failed: ${errorMsg}`),
+          );
+          console.log(chalk.blue(`  ⏳ Retrying in ${backoffDelay}ms...`));
+        }
+        await sleep(backoffDelay);
+      } else {
+        if (verbose) {
+          console.log(chalk.red(`  ✗ All ${maxRetries} attempts failed`));
+        }
+        return { success: false, attempts: maxRetries, error: errorMsg };
+      }
+    }
+  }
+
+  return { success: false, attempts: maxRetries };
+}
+
 /**
  * Parses a relative date string like "7d" or "1m" into a Date.
  */
-function parseRelativeDate(input: string): Date | null {
+export function parseRelativeDate(input: string): Date | null {
   const match = input.match(/^(\d+)([dmwMy])$/);
   if (!match) return null;
 
@@ -56,19 +173,19 @@ function parseRelativeDate(input: string): Date | null {
   const now = new Date();
 
   switch (unit) {
-    case 'd':
+    case "d":
       now.setDate(now.getDate() - amount);
       break;
-    case 'w':
+    case "w":
       now.setDate(now.getDate() - amount * 7);
       break;
-    case 'm':
+    case "m":
       now.setMonth(now.getMonth() - amount);
       break;
-    case 'M':
+    case "M":
       now.setMonth(now.getMonth() - amount);
       break;
-    case 'y':
+    case "y":
       now.setFullYear(now.getFullYear() - amount);
       break;
     default:
@@ -81,7 +198,7 @@ function parseRelativeDate(input: string): Date | null {
 /**
  * Parses the --since option into a Date.
  */
-function parseSinceDate(since: string): Date | null {
+export function parseSinceDate(since: string): Date | null {
   // Try relative format first
   const relativeDate = parseRelativeDate(since);
   if (relativeDate) return relativeDate;
@@ -97,9 +214,9 @@ function parseSinceDate(since: string): Date | null {
  * Recursively finds all .jsonl files in a directory.
  * Returns an object with found files and any errors encountered.
  */
-async function findJsonlFiles(
+export async function findJsonlFiles(
   dir: string,
-  errors: string[] = []
+  errors: string[] = [],
 ): Promise<{ files: string[]; errors: string[] }> {
   const files: string[] = [];
 
@@ -112,7 +229,7 @@ async function findJsonlFiles(
       if (entry.isDirectory()) {
         const result = await findJsonlFiles(fullPath, errors);
         files.push(...result.files);
-      } else if (entry.isFile() && entry.name.endsWith('.jsonl')) {
+      } else if (entry.isFile() && entry.name.endsWith(".jsonl")) {
         files.push(fullPath);
       }
     }
@@ -127,15 +244,120 @@ async function findJsonlFiles(
 interface StreamResult {
   record?: ParsedRecord;
   parseError?: boolean;
+  missingFields?: boolean;
+}
+
+export interface RecordStatistics {
+  totalRecords: number;
+  oldestTimestamp: string;
+  newestTimestamp: string;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheReadTokens: number;
+  totalCacheCreationTokens: number;
+}
+
+export function calculateStatistics(records: ParsedRecord[]): RecordStatistics {
+  if (records.length === 0) {
+    return {
+      totalRecords: 0,
+      oldestTimestamp: "",
+      newestTimestamp: "",
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalCacheReadTokens: 0,
+      totalCacheCreationTokens: 0,
+    };
+  }
+
+  const sortedRecords = [...records].sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+  );
+
+  return {
+    totalRecords: records.length,
+    oldestTimestamp: sortedRecords[0].timestamp,
+    newestTimestamp: sortedRecords[sortedRecords.length - 1].timestamp,
+    totalInputTokens: records.reduce((sum, r) => sum + r.inputTokens, 0),
+    totalOutputTokens: records.reduce((sum, r) => sum + r.outputTokens, 0),
+    totalCacheReadTokens: records.reduce(
+      (sum, r) => sum + r.cacheReadTokens,
+      0,
+    ),
+    totalCacheCreationTokens: records.reduce(
+      (sum, r) => sum + r.cacheCreationTokens,
+      0,
+    ),
+  };
+}
+
+export function parseJsonlLine(
+  line: string,
+  sinceDate: Date | null,
+): StreamResult {
+  if (!line.trim()) {
+    return {};
+  }
+
+  let entry: JsonlEntry;
+  try {
+    entry = JSON.parse(line);
+  } catch {
+    return { parseError: true };
+  }
+
+  if (entry.type !== "assistant" || !entry.message?.usage) {
+    return {};
+  }
+
+  const usage = entry.message.usage;
+  const timestamp = entry.timestamp;
+  const sessionId = entry.sessionId;
+  const model = entry.message.model;
+
+  if (!timestamp || !sessionId || !model) {
+    return { missingFields: true };
+  }
+
+  const entryDate = new Date(timestamp);
+  if (!Number.isFinite(entryDate.getTime())) {
+    return {};
+  }
+
+  if (sinceDate && entryDate < sinceDate) {
+    return {};
+  }
+
+  const totalTokens =
+    (usage.input_tokens || 0) +
+    (usage.output_tokens || 0) +
+    (usage.cache_read_input_tokens || 0) +
+    (usage.cache_creation_input_tokens || 0);
+
+  if (totalTokens === 0) {
+    return {};
+  }
+
+  return {
+    record: {
+      sessionId,
+      timestamp,
+      model,
+      inputTokens: usage.input_tokens || 0,
+      outputTokens: usage.output_tokens || 0,
+      cacheReadTokens: usage.cache_read_input_tokens || 0,
+      cacheCreationTokens: usage.cache_creation_input_tokens || 0,
+    },
+  };
 }
 
 /**
  * Streams a JSONL file and extracts records with usage data.
  * Yields objects indicating either a valid record or a parse error.
  */
-async function* streamJsonlRecords(
+export async function* streamJsonlRecords(
   filePath: string,
-  sinceDate: Date | null
+  sinceDate: Date | null,
 ): AsyncGenerator<StreamResult> {
   const fileStream = createReadStream(filePath);
   const rl = createInterface({
@@ -145,58 +367,12 @@ async function* streamJsonlRecords(
 
   try {
     for await (const line of rl) {
-      if (!line.trim()) continue;
-
-      try {
-        const entry: JsonlEntry = JSON.parse(line);
-
-        // Only process assistant messages with usage data
-        if (entry.type !== 'assistant' || !entry.message?.usage) continue;
-
-        const usage = entry.message.usage;
-        const timestamp = entry.timestamp;
-        const sessionId = entry.sessionId;
-        const model = entry.message.model;
-
-        // Skip if missing required fields
-        if (!timestamp || !sessionId || !model) continue;
-
-        // Validate timestamp is a valid date
-        const entryDate = new Date(timestamp);
-        if (!Number.isFinite(entryDate.getTime())) continue;
-
-        // Check date filter
-        if (sinceDate) {
-          if (entryDate < sinceDate) continue;
-        }
-
-        // Skip entries with no actual token usage
-        const totalTokens =
-          (usage.input_tokens || 0) +
-          (usage.output_tokens || 0) +
-          (usage.cache_read_input_tokens || 0) +
-          (usage.cache_creation_input_tokens || 0);
-
-        if (totalTokens === 0) continue;
-
-        yield {
-          record: {
-            sessionId,
-            timestamp,
-            model,
-            inputTokens: usage.input_tokens || 0,
-            outputTokens: usage.output_tokens || 0,
-            cacheReadTokens: usage.cache_read_input_tokens || 0,
-            cacheCreationTokens: usage.cache_creation_input_tokens || 0,
-          },
-        };
-      } catch {
-        // Invalid JSON line, signal parse error
-        yield { parseError: true };
+      const result = parseJsonlLine(line, sinceDate);
+      if (result.record || result.parseError || result.missingFields) {
+        yield result;
       }
     }
   } finally {
-    // Ensure file stream is properly closed even on early exit
     fileStream.destroy();
     rl.close();
   }
@@ -206,7 +382,7 @@ async function* streamJsonlRecords(
  * Converts a timestamp to nanoseconds since Unix epoch.
  * Returns null if the timestamp is invalid.
  */
-function toUnixNano(timestamp: string): string | null {
+export function toUnixNano(timestamp: string): string | null {
   const date = new Date(timestamp);
   const ms = date.getTime();
   if (!Number.isFinite(ms)) {
@@ -216,70 +392,113 @@ function toUnixNano(timestamp: string): string | null {
 }
 
 /**
- * Creates an OTEL metrics payload from parsed records.
- * Each record generates multiple metrics (input_tokens, output_tokens, etc.)
+ * Creates an OTLP logs payload from parsed records.
+ * Filters out records with invalid timestamps as a safety measure.
  */
-function createOtlpPayload(
+export interface PayloadOptions {
+  costMultiplier: number;
+  email?: string;
+  organizationId?: string;
+  productId?: string;
+}
+
+export function createOtlpPayload(
   records: ParsedRecord[],
-  costMultiplier: number
-): OTLPMetricsPayload {
-  // Build metrics for all records
-  const allMetrics: Array<{
-    name: string;
-    sum: {
-      dataPoints: Array<{
-        attributes: Array<{ key: string; value: { stringValue?: string; doubleValue?: number } }>;
-        timeUnixNano: string;
-        asInt: number;
-      }>;
-    };
-  }> = [];
+  options: PayloadOptions,
+): OTLPLogsPayload {
+  const { costMultiplier, email, organizationId, productId } = options;
 
-  for (const record of records) {
-    const timeUnixNano = toUnixNano(record.timestamp);
-    if (timeUnixNano === null) continue;
+  // Filter and map records, skipping any with invalid timestamps
+  const logRecords = records
+    .map((record) => {
+      const timeUnixNano = toUnixNano(record.timestamp);
+      if (timeUnixNano === null) {
+        return null;
+      }
 
-    // Common attributes for this record
-    const attributes: Array<{ key: string; value: { stringValue?: string; doubleValue?: number } }> = [
-      { key: 'ai.transaction_id', value: { stringValue: record.sessionId } },
-      { key: 'ai.model', value: { stringValue: record.model } },
-      { key: 'ai.provider', value: { stringValue: 'anthropic' } },
-      { key: 'cost_multiplier', value: { doubleValue: costMultiplier } },
-    ];
-
-    // Create metrics for each token type
-    const tokenMetrics = [
-      { name: 'ai.tokens.input', value: record.inputTokens },
-      { name: 'ai.tokens.output', value: record.outputTokens },
-      { name: 'ai.tokens.cache_read', value: record.cacheReadTokens },
-      { name: 'ai.tokens.cache_creation', value: record.cacheCreationTokens },
-    ];
-
-    for (const metric of tokenMetrics) {
-      allMetrics.push({
-        name: metric.name,
-        sum: {
-          dataPoints: [{
-            attributes,
-            timeUnixNano,
-            asInt: metric.value,
-          }],
+      // Build attributes array with required fields
+      const attributes: Array<{
+        key: string;
+        value: { stringValue?: string; intValue?: number };
+      }> = [
+        {
+          key: "transaction_id",
+          value: { stringValue: generateTransactionId(record) },
         },
-      });
-    }
-  }
+        {
+          key: "session.id",
+          value: { stringValue: record.sessionId },
+        },
+        {
+          key: "model",
+          value: { stringValue: record.model },
+        },
+        {
+          key: "input_tokens",
+          value: { intValue: record.inputTokens },
+        },
+        {
+          key: "output_tokens",
+          value: { intValue: record.outputTokens },
+        },
+        {
+          key: "cache_read_tokens",
+          value: { intValue: record.cacheReadTokens },
+        },
+        {
+          key: "cache_creation_tokens",
+          value: { intValue: record.cacheCreationTokens },
+        },
+      ];
+
+      // Add optional subscriber/attribution attributes at log record level
+      // (backend ClaudeCodeMapper reads these from log record attrs, not resource attrs)
+      if (email) {
+        attributes.push({ key: "user.email", value: { stringValue: email } });
+      }
+      if (organizationId) {
+        attributes.push({
+          key: "organization.name",
+          value: { stringValue: organizationId },
+        });
+      }
+      if (productId) {
+        attributes.push({
+          key: "product.name",
+          value: { stringValue: productId },
+        });
+      }
+
+      return {
+        timeUnixNano,
+        body: { stringValue: "claude_code.api_request" },
+        attributes,
+      };
+    })
+    .filter((record): record is NonNullable<typeof record> => record !== null);
 
   return {
-    resourceMetrics: [
+    resourceLogs: [
       {
         resource: {
           attributes: [
-            { key: 'service.name', value: { stringValue: 'claude-code' } },
+            {
+              key: "service.name",
+              value: { stringValue: "claude-code" },
+            },
+            {
+              key: "cost_multiplier",
+              value: { doubleValue: costMultiplier },
+            },
           ],
         },
-        scopeMetrics: [
+        scopeLogs: [
           {
-            metrics: allMetrics,
+            scope: {
+              name: "claude-code",
+              version: "1.0.0",
+            },
+            logRecords,
           },
         ],
       },
@@ -290,21 +509,42 @@ function createOtlpPayload(
 /**
  * Backfill command - imports historical Claude Code usage data.
  */
-export async function backfillCommand(options: BackfillOptions = {}): Promise<void> {
-  const { since, dryRun = false, batchSize = 100, verbose = false } = options;
+export async function backfillCommand(
+  options: BackfillOptions = {},
+  deps: Partial<BackfillDependencies> = {},
+): Promise<void> {
+  const {
+    since,
+    dryRun = false,
+    batchSize = 100,
+    delay = 100,
+    verbose = false,
+  } = options;
 
-  console.log(chalk.bold('\nRevenium Claude Code Backfill\n'));
+  const {
+    loadConfig: getConfig = loadConfig,
+    findJsonlFiles: findFiles = findJsonlFiles,
+    streamJsonlRecords: streamRecords = streamJsonlRecords,
+    sendBatchWithRetry: sendBatch = sendBatchWithRetry,
+    homedir: getHomedir = homedir,
+  } = deps;
+
+  console.log(chalk.bold("\nRevenium Claude Code Backfill\n"));
 
   if (dryRun) {
-    console.log(chalk.yellow('Running in dry-run mode - no data will be sent\n'));
+    console.log(
+      chalk.yellow("Running in dry-run mode - no data will be sent\n"),
+    );
   }
 
   // Load configuration
-  const config = await loadConfig();
+  const config = await getConfig();
   if (!config) {
-    console.log(chalk.red('Configuration not found'));
+    console.log(chalk.red("Configuration not found"));
     console.log(
-      chalk.yellow('\nRun `revenium-metering setup` to configure Claude Code metering.')
+      chalk.yellow(
+        "\nRun `revenium-metering setup` to configure Claude Code metering.",
+      ),
     );
     process.exit(1);
   }
@@ -315,25 +555,37 @@ export async function backfillCommand(options: BackfillOptions = {}): Promise<vo
     sinceDate = parseSinceDate(since);
     if (!sinceDate) {
       console.log(chalk.red(`Invalid --since value: ${since}`));
-      console.log(chalk.dim('Use ISO format (2024-01-15) or relative format (7d, 1m, 1y)'));
+      console.log(
+        chalk.dim(
+          "Use ISO format (2024-01-15) or relative format (7d, 1m, 1y)",
+        ),
+      );
       process.exit(1);
     }
-    console.log(chalk.dim(`Filtering records since: ${sinceDate.toISOString()}\n`));
+    console.log(
+      chalk.dim(`Filtering records since: ${sinceDate.toISOString()}\n`),
+    );
   }
 
   // Get cost multiplier (use ?? to allow explicit 0 override for free tier/testing)
-  const costMultiplier = config.costMultiplierOverride ??
-    (config.subscriptionTier ? getCostMultiplier(config.subscriptionTier as SubscriptionTier) : 0.08);
+  const costMultiplier =
+    config.costMultiplierOverride ??
+    (config.subscriptionTier
+      ? getCostMultiplier(config.subscriptionTier as SubscriptionTier)
+      : 0.08);
 
   // Discover JSONL files
-  const projectsDir = join(homedir(), '.claude', 'projects');
-  const discoverSpinner = ora('Discovering JSONL files...').start();
+  const projectsDir = join(getHomedir(), ".claude", "projects");
+  const discoverSpinner = ora("Discovering JSONL files...").start();
 
-  const { files: jsonlFiles, errors: discoveryErrors } = await findJsonlFiles(projectsDir);
+  const { files: jsonlFiles, errors: discoveryErrors } =
+    await findFiles(projectsDir);
 
   if (discoveryErrors.length > 0 && verbose) {
-    discoverSpinner.warn(`Found ${jsonlFiles.length} JSONL file(s) with ${discoveryErrors.length} directory error(s)`);
-    console.log(chalk.yellow('\nDirectory access errors:'));
+    discoverSpinner.warn(
+      `Found ${jsonlFiles.length} JSONL file(s) with ${discoveryErrors.length} directory error(s)`,
+    );
+    console.log(chalk.yellow("\nDirectory access errors:"));
     for (const error of discoveryErrors.slice(0, 5)) {
       console.log(chalk.yellow(`  ${error}`));
     }
@@ -341,10 +593,10 @@ export async function backfillCommand(options: BackfillOptions = {}): Promise<vo
       console.log(chalk.yellow(`  ... and ${discoveryErrors.length - 5} more`));
     }
   } else if (jsonlFiles.length === 0) {
-    discoverSpinner.fail('No JSONL files found');
+    discoverSpinner.fail("No JSONL files found");
     console.log(chalk.dim(`Searched in: ${projectsDir}`));
     if (discoveryErrors.length > 0) {
-      console.log(chalk.yellow('\nDirectory access errors:'));
+      console.log(chalk.yellow("\nDirectory access errors:"));
       for (const error of discoveryErrors) {
         console.log(chalk.yellow(`  ${error}`));
       }
@@ -355,28 +607,31 @@ export async function backfillCommand(options: BackfillOptions = {}): Promise<vo
   }
 
   if (verbose) {
-    console.log(chalk.dim('\nFiles:'));
+    console.log(chalk.dim("\nFiles:"));
     for (const file of jsonlFiles.slice(0, 10)) {
       console.log(chalk.dim(`  ${file}`));
     }
     if (jsonlFiles.length > 10) {
       console.log(chalk.dim(`  ... and ${jsonlFiles.length - 10} more`));
     }
-    console.log('');
+    console.log("");
   }
 
   // Process files and collect records
-  const processSpinner = ora('Processing files...').start();
+  const processSpinner = ora("Processing files...").start();
   const allRecords: ParsedRecord[] = [];
   let processedFiles = 0;
   let skippedLines = 0;
   let skippedFiles = 0;
+  let skippedMissingFields = 0;
 
   for (const file of jsonlFiles) {
     try {
-      for await (const result of streamJsonlRecords(file, sinceDate)) {
+      for await (const result of streamRecords(file, sinceDate)) {
         if (result.parseError) {
           skippedLines++;
+        } else if (result.missingFields) {
+          skippedMissingFields++;
         } else if (result.record) {
           allRecords.push(result.record);
         }
@@ -387,7 +642,9 @@ export async function backfillCommand(options: BackfillOptions = {}): Promise<vo
       skippedFiles++;
       if (verbose) {
         const message = error instanceof Error ? error.message : String(error);
-        console.log(chalk.yellow(`\nWarning: Could not process ${file}: ${message}`));
+        console.log(
+          chalk.yellow(`\nWarning: Could not process ${file}: ${message}`),
+        );
       }
     }
   }
@@ -395,49 +652,101 @@ export async function backfillCommand(options: BackfillOptions = {}): Promise<vo
   // Build status message with skipped line info
   let statusMessage = `Processed ${processedFiles} files, found ${allRecords.length} usage records`;
   if (skippedLines > 0) {
-    statusMessage += chalk.yellow(` (${skippedLines} malformed line${skippedLines > 1 ? 's' : ''} skipped)`);
+    statusMessage += chalk.yellow(
+      ` (${skippedLines} malformed line${skippedLines > 1 ? "s" : ""} skipped)`,
+    );
+  }
+  if (skippedMissingFields > 0) {
+    statusMessage += chalk.yellow(
+      ` (${skippedMissingFields} record${skippedMissingFields > 1 ? "s" : ""} missing required fields)`,
+    );
   }
   if (skippedFiles > 0) {
-    statusMessage += chalk.yellow(` (${skippedFiles} file${skippedFiles > 1 ? 's' : ''} failed)`);
+    statusMessage += chalk.yellow(
+      ` (${skippedFiles} file${skippedFiles > 1 ? "s" : ""} failed)`,
+    );
   }
 
   processSpinner.succeed(statusMessage);
 
   if (allRecords.length === 0) {
-    console.log(chalk.yellow('\nNo usage records found to backfill.'));
+    console.log(chalk.yellow("\nNo usage records found to backfill."));
+    if (skippedMissingFields > 0) {
+      console.log(
+        chalk.dim(
+          `${skippedMissingFields} record${skippedMissingFields > 1 ? "s were" : " was"} skipped due to missing required fields (timestamp, sessionId, or model).`,
+        ),
+      );
+    }
     if (since) {
-      console.log(chalk.dim(`Try a broader date range or remove the --since filter.`));
+      console.log(
+        chalk.dim(`Try a broader date range or remove the --since filter.`),
+      );
     }
     return;
   }
 
-  // Sort records by timestamp
-  allRecords.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  // Calculate statistics
+  const stats = calculateStatistics(allRecords);
 
-  // Show summary
-  const oldestRecord = allRecords[0];
-  const newestRecord = allRecords[allRecords.length - 1];
-  const totalInputTokens = allRecords.reduce((sum, r) => sum + r.inputTokens, 0);
-  const totalOutputTokens = allRecords.reduce((sum, r) => sum + r.outputTokens, 0);
-  const totalCacheReadTokens = allRecords.reduce((sum, r) => sum + r.cacheReadTokens, 0);
-  const totalCacheCreationTokens = allRecords.reduce((sum, r) => sum + r.cacheCreationTokens, 0);
-
-  console.log('\n' + chalk.bold('Summary:'));
-  console.log(`  Records:              ${allRecords.length.toLocaleString()}`);
-  console.log(`  Date range:           ${oldestRecord.timestamp.split('T')[0]} to ${newestRecord.timestamp.split('T')[0]}`);
-  console.log(`  Input tokens:         ${totalInputTokens.toLocaleString()}`);
-  console.log(`  Output tokens:        ${totalOutputTokens.toLocaleString()}`);
-  console.log(`  Cache read tokens:    ${totalCacheReadTokens.toLocaleString()}`);
-  console.log(`  Cache creation:       ${totalCacheCreationTokens.toLocaleString()}`);
+  console.log("\n" + chalk.bold("Summary:"));
+  console.log(`  Records:              ${stats.totalRecords.toLocaleString()}`);
+  console.log(
+    `  Date range:           ${stats.oldestTimestamp.split("T")[0]} to ${stats.newestTimestamp.split("T")[0]}`,
+  );
+  console.log(
+    `  Input tokens:         ${stats.totalInputTokens.toLocaleString()}`,
+  );
+  console.log(
+    `  Output tokens:        ${stats.totalOutputTokens.toLocaleString()}`,
+  );
+  console.log(
+    `  Cache read tokens:    ${stats.totalCacheReadTokens.toLocaleString()}`,
+  );
+  console.log(
+    `  Cache creation:       ${stats.totalCacheCreationTokens.toLocaleString()}`,
+  );
   console.log(`  Cost multiplier:      ${costMultiplier}`);
 
+  if (
+    verbose &&
+    (skippedLines > 0 || skippedMissingFields > 0 || skippedFiles > 0)
+  ) {
+    console.log("\n" + chalk.dim("Skipped records:"));
+    if (skippedLines > 0) {
+      console.log(
+        chalk.dim(`  Malformed JSON:       ${skippedLines.toLocaleString()}`),
+      );
+    }
+    if (skippedMissingFields > 0) {
+      console.log(
+        chalk.dim(
+          `  Missing fields:       ${skippedMissingFields.toLocaleString()} (timestamp, sessionId, or model)`,
+        ),
+      );
+    }
+    if (skippedFiles > 0) {
+      console.log(
+        chalk.dim(`  Failed files:         ${skippedFiles.toLocaleString()}`),
+      );
+    }
+  }
+
   if (dryRun) {
-    console.log('\n' + chalk.yellow('Dry run complete. Use without --dry-run to send data.'));
+    console.log(
+      "\n" +
+        chalk.yellow("Dry run complete. Use without --dry-run to send data."),
+    );
 
     if (verbose) {
-      console.log('\n' + chalk.dim('Sample OTLP payload (first batch):'));
+      console.log("\n" + chalk.dim("Sample OTLP payload (first batch):"));
       const sampleRecords = allRecords.slice(0, Math.min(batchSize, 3));
-      const samplePayload = createOtlpPayload(sampleRecords, costMultiplier);
+      const samplePayload = createOtlpPayload(sampleRecords, {
+        costMultiplier,
+        email: config.email,
+        organizationId: config.organizationId,
+        productId: config.productId,
+      });
       console.log(chalk.dim(JSON.stringify(samplePayload, null, 2)));
     }
     return;
@@ -445,39 +754,93 @@ export async function backfillCommand(options: BackfillOptions = {}): Promise<vo
 
   // Send data in batches
   const totalBatches = Math.ceil(allRecords.length / batchSize);
-  const sendSpinner = ora(`Sending data... (0/${totalBatches} batches)`).start();
+  const sendSpinner = ora(
+    `Sending data... (0/${totalBatches} batches, ~${delay}ms delay)`,
+  ).start();
   let sentBatches = 0;
   let sentRecords = 0;
-  let failedBatches = 0;
+  let permanentlyFailedBatches = 0;
+  let totalRetryAttempts = 0;
+  const failedBatchDetails: Array<{ batchNumber: number; error: string }> = [];
+  const maxRetries = 3;
 
   for (let i = 0; i < allRecords.length; i += batchSize) {
+    const batchNumber = Math.floor(i / batchSize) + 1;
     const batch = allRecords.slice(i, i + batchSize);
-    const payload = createOtlpPayload(batch, costMultiplier);
+    const payload = createOtlpPayload(batch, {
+      costMultiplier,
+      email: config.email,
+      organizationId: config.organizationId,
+      productId: config.productId,
+    });
 
-    try {
-      await sendOtlpMetrics(config.endpoint, config.apiKey, payload);
+    sendSpinner.text = `Sending batch ${batchNumber}/${totalBatches}...`;
+
+    const result = await sendBatch(
+      config.endpoint,
+      config.apiKey,
+      payload,
+      maxRetries,
+      verbose,
+    );
+
+    totalRetryAttempts += result.attempts;
+
+    if (result.success) {
       sentBatches++;
       sentRecords += batch.length;
-      sendSpinner.text = `Sending data... (${sentBatches}/${totalBatches} batches)`;
-    } catch (error) {
-      failedBatches++;
-      if (verbose) {
-        const batchNumber = Math.floor(i / batchSize) + 1;
-        console.log(
-          chalk.yellow(`\nBatch ${batchNumber} failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-        );
-      }
+      sendSpinner.text = `Sending data... (${sentBatches}/${totalBatches} batches, ~${delay}ms delay)`;
+    } else {
+      permanentlyFailedBatches++;
+      failedBatchDetails.push({
+        batchNumber,
+        error: result.error || "Unknown error",
+      });
+    }
+
+    // Apply rate limiting delay between batches (except after the last batch)
+    if (i + batchSize < allRecords.length) {
+      sendSpinner.text = `Waiting ${delay}ms before next batch...`;
+      await sleep(delay);
     }
   }
 
-  if (failedBatches === 0) {
-    sendSpinner.succeed(`Sent ${sentRecords.toLocaleString()} records in ${sentBatches} batches`);
+  if (permanentlyFailedBatches === 0) {
+    sendSpinner.succeed(
+      `Sent ${sentRecords.toLocaleString()} records in ${sentBatches} batches`,
+    );
   } else {
     sendSpinner.warn(
-      `Sent ${sentRecords.toLocaleString()} records in ${sentBatches} batches (${failedBatches} failed)`
+      `Sent ${sentRecords.toLocaleString()} records in ${sentBatches} batches (${permanentlyFailedBatches} permanently failed)`,
     );
   }
 
-  console.log('\n' + chalk.green.bold('Backfill complete!'));
-  console.log(chalk.dim('Check your Revenium dashboard to see the imported data.'));
+  // Show retry statistics if there were retries
+  const retriedBatches = totalRetryAttempts - totalBatches;
+  if (retriedBatches > 0 && verbose) {
+    console.log("\n" + chalk.bold("Retry Statistics:"));
+    console.log(`  Total retry attempts:     ${retriedBatches}`);
+    console.log(
+      `  Average attempts/batch:   ${(totalRetryAttempts / totalBatches).toFixed(2)}`,
+    );
+  }
+
+  // Show permanently failed batches details
+  if (permanentlyFailedBatches > 0) {
+    console.log("\n" + chalk.red.bold("Permanently Failed Batches:"));
+    for (const failed of failedBatchDetails) {
+      console.log(chalk.red(`  Batch ${failed.batchNumber}: ${failed.error}`));
+    }
+    console.log(
+      "\n" +
+        chalk.yellow(
+          "Tip: You can re-run the backfill command to retry failed batches.",
+        ),
+    );
+  }
+
+  console.log("\n" + chalk.green.bold("Backfill complete!"));
+  console.log(
+    chalk.dim("Check your Revenium dashboard to see the imported data."),
+  );
 }

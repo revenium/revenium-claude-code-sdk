@@ -2,9 +2,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getConfigPath = getConfigPath;
 exports.configExists = configExists;
+exports.parseEnvContent = parseEnvContent;
 exports.loadConfig = loadConfig;
 exports.isEnvLoaded = isEnvLoaded;
-exports.checkMigrationStatus = checkMigrationStatus;
 exports.getFullOtlpEndpoint = getFullOtlpEndpoint;
 const node_os_1 = require("node:os");
 const node_path_1 = require("node:path");
@@ -28,26 +28,33 @@ function configExists() {
  */
 function parseEnvContent(content) {
     const result = {};
-    for (const line of content.split('\n')) {
+    for (const line of content.split("\n")) {
         let trimmed = line.trim();
         // Skip empty lines and comments
-        if (!trimmed || trimmed.startsWith('#')) {
+        if (!trimmed || trimmed.startsWith("#")) {
             continue;
         }
         // Handle 'export' prefix
-        if (trimmed.startsWith('export ')) {
+        if (trimmed.startsWith("export ")) {
             trimmed = trimmed.substring(7).trim();
         }
-        const equalsIndex = trimmed.indexOf('=');
+        const equalsIndex = trimmed.indexOf("=");
         if (equalsIndex === -1) {
             continue;
         }
         const key = trimmed.substring(0, equalsIndex).trim();
         let value = trimmed.substring(equalsIndex + 1).trim();
-        // Remove surrounding quotes if present
+        // Remove surrounding quotes if present and unescape
         if ((value.startsWith('"') && value.endsWith('"')) ||
             (value.startsWith("'") && value.endsWith("'"))) {
             value = value.substring(1, value.length - 1);
+            // Unescape common shell escape sequences
+            value = value
+                .replace(/\\"/g, '"')
+                .replace(/\\'/g, "'")
+                .replace(/\\\$/g, "$")
+                .replace(/\\`/g, "`")
+                .replace(/\\\\/g, "\\");
         }
         result[key] = value;
     }
@@ -71,14 +78,43 @@ function extractBaseEndpoint(fullEndpoint) {
         // Remove the OTLP path suffix to get the base URL
         // Handle both old path (/meter/v2/ai/otlp) and new path (/meter/v2/otlp)
         const path = url.pathname;
-        if (path.includes('/meter/v2/otlp') || path.includes('/meter/v2/ai/otlp')) {
-            url.pathname = '';
+        if (path.includes("/meter/v2/otlp") || path.includes("/meter/v2/ai/otlp")) {
+            url.pathname = "";
         }
         return url.origin;
     }
     catch {
         return fullEndpoint;
     }
+}
+/**
+ * Parses OTEL_RESOURCE_ATTRIBUTES value into key-value pairs.
+ * Format: "key1=value1,key2=value2"
+ */
+function parseOtelResourceAttributes(value) {
+    const result = {};
+    if (!value || typeof value !== "string")
+        return result;
+    const pairs = value.split(",");
+    for (const pair of pairs) {
+        const trimmed = pair.trim();
+        if (!trimmed)
+            continue;
+        const equalsIndex = trimmed.indexOf("=");
+        if (equalsIndex === -1)
+            continue;
+        const key = trimmed.substring(0, equalsIndex).trim();
+        let attrValue = trimmed.substring(equalsIndex + 1).trim();
+        try {
+            attrValue = decodeURIComponent(attrValue);
+        }
+        catch {
+            // If decoding fails, use raw value
+        }
+        if (key)
+            result[key] = attrValue;
+    }
+    return result;
 }
 /**
  * Loads the Revenium configuration from the .env file.
@@ -90,25 +126,39 @@ async function loadConfig() {
         return null;
     }
     try {
-        const content = await (0, promises_1.readFile)(configPath, 'utf-8');
+        const content = await (0, promises_1.readFile)(configPath, "utf-8");
         const env = parseEnvContent(content);
-        const fullEndpoint = env[constants_js_1.ENV_VARS.OTLP_ENDPOINT] || '';
-        const headers = env[constants_js_1.ENV_VARS.OTLP_HEADERS] || '';
+        const fullEndpoint = env[constants_js_1.ENV_VARS.OTLP_ENDPOINT] || "";
+        const headers = env[constants_js_1.ENV_VARS.OTLP_HEADERS] || "";
         const apiKey = extractApiKeyFromHeaders(headers);
         if (!apiKey) {
             return null;
         }
         // Parse cost multiplier override if present
         const costMultiplierStr = env[constants_js_1.ENV_VARS.COST_MULTIPLIER];
-        const costMultiplierOverride = costMultiplierStr ? parseFloat(costMultiplierStr) : undefined;
+        const costMultiplierOverride = costMultiplierStr
+            ? parseFloat(costMultiplierStr)
+            : undefined;
+        // Parse OTEL_RESOURCE_ATTRIBUTES for org/product (primary source)
+        const resourceAttrsStr = env["OTEL_RESOURCE_ATTRIBUTES"] || "";
+        const resourceAttrs = parseOtelResourceAttributes(resourceAttrsStr);
+        // Support both .name (preferred) and .id (legacy), with fallback to standalone vars
+        const organizationId = resourceAttrs["organization.name"] ||
+            resourceAttrs["organization.id"] ||
+            env[constants_js_1.ENV_VARS.ORGANIZATION_ID];
+        const productId = resourceAttrs["product.name"] ||
+            resourceAttrs["product.id"] ||
+            env[constants_js_1.ENV_VARS.PRODUCT_ID];
         return {
             apiKey,
             endpoint: extractBaseEndpoint(fullEndpoint),
             email: env[constants_js_1.ENV_VARS.SUBSCRIBER_EMAIL],
             subscriptionTier: env[constants_js_1.ENV_VARS.SUBSCRIPTION],
-            costMultiplierOverride: costMultiplierOverride && !isNaN(costMultiplierOverride) ? costMultiplierOverride : undefined,
-            organizationId: env[constants_js_1.ENV_VARS.ORGANIZATION_ID],
-            productId: env[constants_js_1.ENV_VARS.PRODUCT_ID],
+            costMultiplierOverride: costMultiplierOverride !== undefined && !isNaN(costMultiplierOverride)
+                ? costMultiplierOverride
+                : undefined,
+            organizationId,
+            productId,
         };
     }
     catch {
@@ -119,44 +169,15 @@ async function loadConfig() {
  * Checks if the environment variables are currently loaded in the shell.
  */
 function isEnvLoaded() {
-    return (process.env[constants_js_1.ENV_VARS.TELEMETRY_ENABLED] === '1' &&
+    return (process.env[constants_js_1.ENV_VARS.TELEMETRY_ENABLED] === "1" &&
         !!process.env[constants_js_1.ENV_VARS.OTLP_ENDPOINT]);
-}
-/**
- * Checks if the config file needs migration from old format.
- * Detects: OTEL_LOGS_EXPORTER (should be OTEL_METRICS_EXPORTER)
- */
-async function checkMigrationStatus() {
-    const configPath = getConfigPath();
-    const issues = [];
-    if (!(0, node_fs_1.existsSync)(configPath)) {
-        return { needsMigration: false, issues: [] };
-    }
-    try {
-        const content = await (0, promises_1.readFile)(configPath, 'utf-8');
-        // Check for old OTEL_LOGS_EXPORTER (should be OTEL_METRICS_EXPORTER)
-        if (content.includes('OTEL_LOGS_EXPORTER')) {
-            issues.push('Config uses OTEL_LOGS_EXPORTER (should be OTEL_METRICS_EXPORTER)');
-        }
-        // Check for old endpoint path
-        if (content.includes('/meter/v2/ai/otlp')) {
-            issues.push('Config uses old endpoint path /meter/v2/ai/otlp (should be /meter/v2/otel)');
-        }
-        return {
-            needsMigration: issues.length > 0,
-            issues,
-        };
-    }
-    catch {
-        return { needsMigration: false, issues: [] };
-    }
 }
 /**
  * Gets the full OTLP endpoint URL from a base URL.
  */
 function getFullOtlpEndpoint(baseUrl) {
     // Remove trailing slash if present
-    const cleanUrl = baseUrl.replace(/\/$/, '');
+    const cleanUrl = baseUrl.replace(/\/$/, "");
     return `${cleanUrl}${constants_js_1.OTLP_PATH}`;
 }
 //# sourceMappingURL=loader.js.map

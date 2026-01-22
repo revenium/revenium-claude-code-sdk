@@ -17,6 +17,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // Re-export types and utilities for programmatic use
 __exportStar(require("./types/index.js"), exports);
 __exportStar(require("./utils/constants.js"), exports);
+__exportStar(require("./utils/hashing.js"), exports);
 __exportStar(require("./utils/masking.js"), exports);
 __exportStar(require("./core/config/loader.js"), exports);
 __exportStar(require("./core/config/writer.js"), exports);

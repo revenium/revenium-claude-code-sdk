@@ -3,6 +3,8 @@ interface SetupOptions {
     email?: string;
     tier?: string;
     endpoint?: string;
+    organizationId?: string;
+    productId?: string;
     skipShellUpdate?: boolean;
 }
 /**
