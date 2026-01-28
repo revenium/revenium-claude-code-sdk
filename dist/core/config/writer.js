@@ -86,11 +86,15 @@ function generateEnvContent(config) {
         // Note: The backend ONLY reads organization.name and product.name from resourceAttributes,
         // ignoring any auto-generated values in log record attributes from Claude Code.
         const resourceAttrs = [`cost_multiplier=${costMultiplier}`];
-        if (config.organizationId) {
-            resourceAttrs.push(`organization.name=${escapeResourceAttributeValue(config.organizationId)}`);
+        // Support both new (organizationName) and old (organizationId) field names with fallback
+        const organizationValue = config.organizationName || config.organizationId;
+        if (organizationValue) {
+            resourceAttrs.push(`organization.name=${escapeResourceAttributeValue(organizationValue)}`);
         }
-        if (config.productId) {
-            resourceAttrs.push(`product.name=${escapeResourceAttributeValue(config.productId)}`);
+        // Support both new (productName) and old (productId) field names with fallback
+        const productValue = config.productName || config.productId;
+        if (productValue) {
+            resourceAttrs.push(`product.name=${escapeResourceAttributeValue(productValue)}`);
         }
         lines.push(`export OTEL_RESOURCE_ATTRIBUTES="${resourceAttrs.join(",")}"`);
     }
@@ -110,7 +114,7 @@ function generateEnvContent(config) {
     // Get current cost multiplier for the example
     const exampleMultiplier = config.subscriptionTier && config.costMultiplierOverride === undefined
         ? (0, constants_js_1.getCostMultiplier)(config.subscriptionTier)
-        : config.costMultiplierOverride ?? "0.08";
+        : (config.costMultiplierOverride ?? "0.08");
     lines.push(`#   OTEL_RESOURCE_ATTRIBUTES="cost_multiplier=${exampleMultiplier},organization.name=my-org,product.name=my-product"`);
     lines.push("#");
     lines.push("# ATTRIBUTE DESCRIPTIONS:");

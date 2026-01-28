@@ -143,10 +143,11 @@ async function loadConfig() {
         const resourceAttrsStr = env["OTEL_RESOURCE_ATTRIBUTES"] || "";
         const resourceAttrs = parseOtelResourceAttributes(resourceAttrsStr);
         // Support both .name (preferred) and .id (legacy), with fallback to standalone vars
-        const organizationId = resourceAttrs["organization.name"] ||
+        // Priority: organizationName > organizationId > organization.name > organization.id > env var
+        const organizationName = resourceAttrs["organization.name"] ||
             resourceAttrs["organization.id"] ||
             env[constants_js_1.ENV_VARS.ORGANIZATION_ID];
-        const productId = resourceAttrs["product.name"] ||
+        const productName = resourceAttrs["product.name"] ||
             resourceAttrs["product.id"] ||
             env[constants_js_1.ENV_VARS.PRODUCT_ID];
         return {
@@ -157,8 +158,10 @@ async function loadConfig() {
             costMultiplierOverride: costMultiplierOverride !== undefined && !isNaN(costMultiplierOverride)
                 ? costMultiplierOverride
                 : undefined,
-            organizationId,
-            productId,
+            organizationName,
+            organizationId: organizationName, // Keep for backward compatibility
+            productName,
+            productId: productName, // Keep for backward compatibility
         };
     }
     catch {

@@ -9,9 +9,17 @@ export declare function sendOtlpLogs(baseEndpoint: string, apiKey: string, paylo
 export interface TestPayloadOptions {
     /** Optional subscriber email for attribution */
     email?: string;
-    /** Optional organization ID to attribute costs to */
+    /** Optional organization name to attribute costs to */
+    organizationName?: string;
+    /**
+     * @deprecated Use organizationName instead. This field will be removed in a future version.
+     */
     organizationId?: string;
-    /** Optional product ID to attribute costs to */
+    /** Optional product name to attribute costs to */
+    productName?: string;
+    /**
+     * @deprecated Use productName instead. This field will be removed in a future version.
+     */
     productId?: string;
 }
 /**

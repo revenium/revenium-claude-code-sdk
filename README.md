@@ -1,5 +1,7 @@
 # @revenium/claude-code-metering
 
+[![CI](https://github.com/revenium/revenium-claude-code-sdk-internal/actions/workflows/ci.yml/badge.svg)](https://github.com/revenium/revenium-claude-code-sdk-internal/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-92.77%25-brightgreen)](https://github.com/revenium/revenium-claude-code-sdk-internal)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 

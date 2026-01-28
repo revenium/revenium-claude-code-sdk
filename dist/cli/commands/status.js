@@ -14,25 +14,25 @@ const detector_js_1 = require("../../core/shell/detector.js");
  * Displays the current configuration status.
  */
 async function statusCommand() {
-    console.log(chalk_1.default.bold('\nRevenium Claude Code Metering Status\n'));
+    console.log(chalk_1.default.bold("\nRevenium Claude Code Metering Status\n"));
     // Check if config file exists
     const configPath = (0, loader_js_1.getConfigPath)();
     if (!(0, loader_js_1.configExists)()) {
-        console.log(chalk_1.default.red('Configuration not found'));
+        console.log(chalk_1.default.red("Configuration not found"));
         console.log(chalk_1.default.dim(`Expected at: ${configPath}`));
-        console.log(chalk_1.default.yellow('\nRun `revenium-metering setup` to configure Claude Code metering.'));
+        console.log(chalk_1.default.yellow("\nRun `revenium-metering setup` to configure Claude Code metering."));
         process.exit(1);
     }
-    console.log(chalk_1.default.green('Configuration file found'));
+    console.log(chalk_1.default.green("Configuration file found"));
     console.log(chalk_1.default.dim(`  ${configPath}`));
     // Load and display configuration
     const config = await (0, loader_js_1.loadConfig)();
     if (!config) {
-        console.log(chalk_1.default.red('\nCould not parse configuration file'));
-        console.log(chalk_1.default.yellow('Run `revenium-metering setup` to reconfigure.'));
+        console.log(chalk_1.default.red("\nCould not parse configuration file"));
+        console.log(chalk_1.default.yellow("Run `revenium-metering setup` to reconfigure."));
         process.exit(1);
     }
-    console.log('\n' + chalk_1.default.bold('Configuration:'));
+    console.log("\n" + chalk_1.default.bold("Configuration:"));
     console.log(`  API Key:    ${(0, masking_js_1.maskApiKey)(config.apiKey)}`);
     console.log(`  Endpoint:   ${config.endpoint}`);
     if (config.email) {
@@ -41,20 +41,22 @@ async function statusCommand() {
     if (config.subscriptionTier) {
         console.log(`  Tier:       ${config.subscriptionTier}`);
     }
-    if (config.organizationId) {
-        console.log(`  Organization: ${config.organizationId}`);
+    const organizationValue = config.organizationName || config.organizationId;
+    if (organizationValue) {
+        console.log(`  Organization: ${organizationValue}`);
     }
-    if (config.productId) {
-        console.log(`  Product:    ${config.productId}`);
+    const productValue = config.productName || config.productId;
+    if (productValue) {
+        console.log(`  Product:    ${productValue}`);
     }
     // Check if environment is loaded
-    console.log('\n' + chalk_1.default.bold('Environment:'));
+    console.log("\n" + chalk_1.default.bold("Environment:"));
     if ((0, loader_js_1.isEnvLoaded)()) {
-        console.log(chalk_1.default.green('  Environment variables are loaded in current shell'));
+        console.log(chalk_1.default.green("  Environment variables are loaded in current shell"));
     }
     else {
-        console.log(chalk_1.default.yellow('  Environment variables not loaded in current shell'));
-        console.log(chalk_1.default.dim('  Run: source ~/.claude/revenium.env'));
+        console.log(chalk_1.default.yellow("  Environment variables not loaded in current shell"));
+        console.log(chalk_1.default.dim("  Run: source ~/.claude/revenium.env"));
     }
     // Shell profile status
     const shellType = (0, detector_js_1.detectShell)();
@@ -64,12 +66,12 @@ async function statusCommand() {
         console.log(`  Profile:    ${profilePath}`);
     }
     // Test endpoint connectivity
-    console.log('\n' + chalk_1.default.bold('Endpoint Health:'));
-    const spinner = (0, ora_1.default)('  Testing connectivity...').start();
+    console.log("\n" + chalk_1.default.bold("Endpoint Health:"));
+    const spinner = (0, ora_1.default)("  Testing connectivity...").start();
     try {
         const healthResult = await (0, client_js_1.checkEndpointHealth)(config.endpoint, config.apiKey, {
-            organizationId: config.organizationId,
-            productId: config.productId,
+            organizationName: config.organizationName || config.organizationId,
+            productName: config.productName || config.productId,
         });
         if (healthResult.healthy) {
             spinner.succeed(`  Endpoint healthy (${healthResult.latencyMs}ms)`);
@@ -79,8 +81,8 @@ async function statusCommand() {
         }
     }
     catch (error) {
-        spinner.fail(`  Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        spinner.fail(`  Connection failed: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
-    console.log('');
+    console.log("");
 }
 //# sourceMappingURL=status.js.map

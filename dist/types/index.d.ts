@@ -9,9 +9,19 @@ export interface ReveniumConfig {
     subscriptionTier?: SubscriptionTier;
     /** Optional override for the cost multiplier (overrides tier default) */
     costMultiplierOverride?: number;
-    /** Optional organization ID for attributing costs to a specific customer/company */
+    /** Optional organization name for attributing costs to a specific customer/company */
+    organizationName?: string;
+    /**
+     * @deprecated Use organizationName instead. This field will be removed in a future version.
+     * Organization or company identifier
+     */
     organizationId?: string;
-    /** Optional product ID for attributing costs to a specific product/project */
+    /** Optional product name for attributing costs to a specific product/project */
+    productName?: string;
+    /**
+     * @deprecated Use productName instead. This field will be removed in a future version.
+     * Product or application identifier
+     */
     productId?: string;
 }
 /**

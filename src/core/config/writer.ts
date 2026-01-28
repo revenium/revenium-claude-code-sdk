@@ -75,7 +75,7 @@ function generateEnvContent(config: ReveniumConfig): string {
     lines.push("");
     lines.push("# Subscriber email for attribution");
     lines.push(
-      `export ${ENV_VARS.SUBSCRIBER_EMAIL}=${escapeShellValue(config.email)}`
+      `export ${ENV_VARS.SUBSCRIBER_EMAIL}=${escapeShellValue(config.email)}`,
     );
   }
 
@@ -88,13 +88,13 @@ function generateEnvContent(config: ReveniumConfig): string {
     lines.push("");
     lines.push("# Claude Code subscription tier");
     lines.push(
-      `export ${ENV_VARS.SUBSCRIPTION}=${escapeShellValue(config.subscriptionTier)}`
+      `export ${ENV_VARS.SUBSCRIPTION}=${escapeShellValue(config.subscriptionTier)}`,
     );
 
     lines.push("");
     lines.push("# Cost multiplier for subscription tier");
     lines.push(
-      "# This adjusts Claude Code costs based on your subscription discount"
+      "# This adjusts Claude Code costs based on your subscription discount",
     );
     lines.push(`# ${tier}: ${discountPercent}% discount vs API rates`);
     if (config.costMultiplierOverride !== undefined) {
@@ -106,14 +106,20 @@ function generateEnvContent(config: ReveniumConfig): string {
     // Note: The backend ONLY reads organization.name and product.name from resourceAttributes,
     // ignoring any auto-generated values in log record attributes from Claude Code.
     const resourceAttrs: string[] = [`cost_multiplier=${costMultiplier}`];
-    if (config.organizationId) {
+
+    // Support both new (organizationName) and old (organizationId) field names with fallback
+    const organizationValue = config.organizationName || config.organizationId;
+    if (organizationValue) {
       resourceAttrs.push(
-        `organization.name=${escapeResourceAttributeValue(config.organizationId)}`
+        `organization.name=${escapeResourceAttributeValue(organizationValue)}`,
       );
     }
-    if (config.productId) {
+
+    // Support both new (productName) and old (productId) field names with fallback
+    const productValue = config.productName || config.productId;
+    if (productValue) {
       resourceAttrs.push(
-        `product.name=${escapeResourceAttributeValue(config.productId)}`
+        `product.name=${escapeResourceAttributeValue(productValue)}`,
       );
     }
     lines.push(`export OTEL_RESOURCE_ATTRIBUTES="${resourceAttrs.join(",")}"`);
@@ -122,26 +128,26 @@ function generateEnvContent(config: ReveniumConfig): string {
   // Add advanced configuration section
   lines.push("");
   lines.push(
-    "# ─────────────────────────────────────────────────────────────────────────────"
+    "# ─────────────────────────────────────────────────────────────────────────────",
   );
   lines.push("# Organization & Product Attribution (Optional)");
   lines.push(
-    "# ─────────────────────────────────────────────────────────────────────────────"
+    "# ─────────────────────────────────────────────────────────────────────────────",
   );
   lines.push("#");
   lines.push(
-    "# To attribute Claude Code costs to a specific organization or product, you must"
+    "# To attribute Claude Code costs to a specific organization or product, you must",
   );
   lines.push(
-    "# add them to OTEL_RESOURCE_ATTRIBUTES above. The backend ONLY reads these values"
+    "# add them to OTEL_RESOURCE_ATTRIBUTES above. The backend ONLY reads these values",
   );
   lines.push(
-    "# from OTEL_RESOURCE_ATTRIBUTES - standalone environment variables are NOT sent."
+    "# from OTEL_RESOURCE_ATTRIBUTES - standalone environment variables are NOT sent.",
   );
   lines.push("#");
   lines.push("# HOW TO CONFIGURE:");
   lines.push(
-    "# Edit the OTEL_RESOURCE_ATTRIBUTES line above to include organization.name and/or product.name:"
+    "# Edit the OTEL_RESOURCE_ATTRIBUTES line above to include organization.name and/or product.name:",
   );
   lines.push("#");
 
@@ -149,28 +155,28 @@ function generateEnvContent(config: ReveniumConfig): string {
   const exampleMultiplier =
     config.subscriptionTier && config.costMultiplierOverride === undefined
       ? getCostMultiplier(config.subscriptionTier as SubscriptionTier)
-      : config.costMultiplierOverride ?? "0.08";
+      : (config.costMultiplierOverride ?? "0.08");
   lines.push(
-    `#   OTEL_RESOURCE_ATTRIBUTES="cost_multiplier=${exampleMultiplier},organization.name=my-org,product.name=my-product"`
+    `#   OTEL_RESOURCE_ATTRIBUTES="cost_multiplier=${exampleMultiplier},organization.name=my-org,product.name=my-product"`,
   );
   lines.push("#");
   lines.push("# ATTRIBUTE DESCRIPTIONS:");
   lines.push(
-    "#   organization.name - Attribute costs to a customer/company (e.g., client name, team)"
+    "#   organization.name - Attribute costs to a customer/company (e.g., client name, team)",
   );
   lines.push(
-    "#   product.name      - Attribute costs to a product/project (e.g., mobile-app, backend-api)"
-  );
-  lines.push("#");
-  lines.push(
-    "# After editing, restart your terminal or run: source ~/.claude/revenium.env"
+    "#   product.name      - Attribute costs to a product/project (e.g., mobile-app, backend-api)",
   );
   lines.push("#");
   lines.push(
-    "# Alternatively, re-run setup with --organization and --product flags:"
+    "# After editing, restart your terminal or run: source ~/.claude/revenium.env",
+  );
+  lines.push("#");
+  lines.push(
+    "# Alternatively, re-run setup with --organization and --product flags:",
   );
   lines.push(
-    "#   npx @revenium/claude-code-metering setup --organization my-org --product my-product"
+    "#   npx @revenium/claude-code-metering setup --organization my-org --product my-product",
   );
 
   lines.push("");
