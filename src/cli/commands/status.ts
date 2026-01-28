@@ -1,39 +1,46 @@
-import chalk from 'chalk';
-import ora from 'ora';
-import { loadConfig, configExists, isEnvLoaded, getConfigPath } from '../../core/config/loader.js';
-import { checkEndpointHealth } from '../../core/api/client.js';
-import { maskApiKey, maskEmail } from '../../utils/masking.js';
-import { detectShell, getProfilePath } from '../../core/shell/detector.js';
+import chalk from "chalk";
+import ora from "ora";
+import {
+  loadConfig,
+  configExists,
+  isEnvLoaded,
+  getConfigPath,
+} from "../../core/config/loader.js";
+import { checkEndpointHealth } from "../../core/api/client.js";
+import { maskApiKey, maskEmail } from "../../utils/masking.js";
+import { detectShell, getProfilePath } from "../../core/shell/detector.js";
 
 /**
  * Displays the current configuration status.
  */
 export async function statusCommand(): Promise<void> {
-  console.log(chalk.bold('\nRevenium Claude Code Metering Status\n'));
+  console.log(chalk.bold("\nRevenium Claude Code Metering Status\n"));
 
   // Check if config file exists
   const configPath = getConfigPath();
   if (!configExists()) {
-    console.log(chalk.red('Configuration not found'));
+    console.log(chalk.red("Configuration not found"));
     console.log(chalk.dim(`Expected at: ${configPath}`));
     console.log(
-      chalk.yellow('\nRun `revenium-metering setup` to configure Claude Code metering.')
+      chalk.yellow(
+        "\nRun `revenium-metering setup` to configure Claude Code metering.",
+      ),
     );
     process.exit(1);
   }
 
-  console.log(chalk.green('Configuration file found'));
+  console.log(chalk.green("Configuration file found"));
   console.log(chalk.dim(`  ${configPath}`));
 
   // Load and display configuration
   const config = await loadConfig();
   if (!config) {
-    console.log(chalk.red('\nCould not parse configuration file'));
-    console.log(chalk.yellow('Run `revenium-metering setup` to reconfigure.'));
+    console.log(chalk.red("\nCould not parse configuration file"));
+    console.log(chalk.yellow("Run `revenium-metering setup` to reconfigure."));
     process.exit(1);
   }
 
-  console.log('\n' + chalk.bold('Configuration:'));
+  console.log("\n" + chalk.bold("Configuration:"));
   console.log(`  API Key:    ${maskApiKey(config.apiKey)}`);
   console.log(`  Endpoint:   ${config.endpoint}`);
   if (config.email) {
@@ -42,20 +49,26 @@ export async function statusCommand(): Promise<void> {
   if (config.subscriptionTier) {
     console.log(`  Tier:       ${config.subscriptionTier}`);
   }
-  if (config.organizationId) {
-    console.log(`  Organization: ${config.organizationId}`);
+  const organizationValue = config.organizationName || config.organizationId;
+  if (organizationValue) {
+    console.log(`  Organization: ${organizationValue}`);
   }
-  if (config.productId) {
-    console.log(`  Product:    ${config.productId}`);
+  const productValue = config.productName || config.productId;
+  if (productValue) {
+    console.log(`  Product:    ${productValue}`);
   }
 
   // Check if environment is loaded
-  console.log('\n' + chalk.bold('Environment:'));
+  console.log("\n" + chalk.bold("Environment:"));
   if (isEnvLoaded()) {
-    console.log(chalk.green('  Environment variables are loaded in current shell'));
+    console.log(
+      chalk.green("  Environment variables are loaded in current shell"),
+    );
   } else {
-    console.log(chalk.yellow('  Environment variables not loaded in current shell'));
-    console.log(chalk.dim('  Run: source ~/.claude/revenium.env'));
+    console.log(
+      chalk.yellow("  Environment variables not loaded in current shell"),
+    );
+    console.log(chalk.dim("  Run: source ~/.claude/revenium.env"));
   }
 
   // Shell profile status
@@ -67,14 +80,18 @@ export async function statusCommand(): Promise<void> {
   }
 
   // Test endpoint connectivity
-  console.log('\n' + chalk.bold('Endpoint Health:'));
-  const spinner = ora('  Testing connectivity...').start();
+  console.log("\n" + chalk.bold("Endpoint Health:"));
+  const spinner = ora("  Testing connectivity...").start();
 
   try {
-    const healthResult = await checkEndpointHealth(config.endpoint, config.apiKey, {
-      organizationId: config.organizationId,
-      productId: config.productId,
-    });
+    const healthResult = await checkEndpointHealth(
+      config.endpoint,
+      config.apiKey,
+      {
+        organizationName: config.organizationName || config.organizationId,
+        productName: config.productName || config.productId,
+      },
+    );
 
     if (healthResult.healthy) {
       spinner.succeed(`  Endpoint healthy (${healthResult.latencyMs}ms)`);
@@ -82,8 +99,10 @@ export async function statusCommand(): Promise<void> {
       spinner.fail(`  Endpoint unhealthy: ${healthResult.message}`);
     }
   } catch (error) {
-    spinner.fail(`  Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    spinner.fail(
+      `  Connection failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+    );
   }
 
-  console.log('');
+  console.log("");
 }

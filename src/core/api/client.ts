@@ -11,7 +11,7 @@ import { getFullOtlpEndpoint } from "../config/loader.js";
 export async function sendOtlpLogs(
   baseEndpoint: string,
   apiKey: string,
-  payload: OTLPLogsPayload
+  payload: OTLPLogsPayload,
 ): Promise<OTLPResponse> {
   const fullEndpoint = getFullOtlpEndpoint(baseEndpoint);
   const url = `${fullEndpoint}/v1/logs`;
@@ -30,7 +30,7 @@ export async function sendOtlpLogs(
     const safeErrorText =
       errorText.length > 200 ? errorText.substring(0, 200) + "..." : errorText;
     throw new Error(
-      `OTLP request failed: ${response.status} ${response.statusText} - ${safeErrorText}`
+      `OTLP request failed: ${response.status} ${response.statusText} - ${safeErrorText}`,
     );
   }
 
@@ -43,9 +43,17 @@ export async function sendOtlpLogs(
 export interface TestPayloadOptions {
   /** Optional subscriber email for attribution */
   email?: string;
-  /** Optional organization ID to attribute costs to */
+  /** Optional organization name to attribute costs to */
+  organizationName?: string;
+  /**
+   * @deprecated Use organizationName instead. This field will be removed in a future version.
+   */
   organizationId?: string;
-  /** Optional product ID to attribute costs to */
+  /** Optional product name to attribute costs to */
+  productName?: string;
+  /**
+   * @deprecated Use productName instead. This field will be removed in a future version.
+   */
   productId?: string;
 }
 
@@ -54,7 +62,7 @@ export interface TestPayloadOptions {
  */
 export function createTestPayload(
   sessionId: string,
-  options?: TestPayloadOptions
+  options?: TestPayloadOptions,
 ): OTLPLogsPayload {
   const now = Date.now() * 1_000_000; // Convert to nanoseconds
 
@@ -80,16 +88,23 @@ export function createTestPayload(
       value: { stringValue: options.email },
     });
   }
-  if (options?.organizationId) {
+
+  // Support both new (organizationName) and old (organizationId) field names with fallback
+  const organizationValue =
+    options?.organizationName || options?.organizationId;
+  if (organizationValue) {
     logAttributes.push({
       key: "organization.name",
-      value: { stringValue: options.organizationId },
+      value: { stringValue: organizationValue },
     });
   }
-  if (options?.productId) {
+
+  // Support both new (productName) and old (productId) field names with fallback
+  const productValue = options?.productName || options?.productId;
+  if (productValue) {
     logAttributes.push({
       key: "product.name",
-      value: { stringValue: options.productId },
+      value: { stringValue: productValue },
     });
   }
 
@@ -140,7 +155,7 @@ export function generateTestSessionId(): string {
 export async function checkEndpointHealth(
   baseEndpoint: string,
   apiKey: string,
-  options?: TestPayloadOptions
+  options?: TestPayloadOptions,
 ): Promise<HealthCheckResult> {
   const startTime = Date.now();
 

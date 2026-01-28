@@ -96,7 +96,15 @@ export declare function toUnixNano(timestamp: string): string | null;
 export interface PayloadOptions {
     costMultiplier: number;
     email?: string;
+    organizationName?: string;
+    /**
+     * @deprecated Use organizationName instead. This field will be removed in a future version.
+     */
     organizationId?: string;
+    productName?: string;
+    /**
+     * @deprecated Use productName instead. This field will be removed in a future version.
+     */
     productId?: string;
 }
 export declare function createOtlpPayload(records: ParsedRecord[], options: PayloadOptions): OTLPLogsPayload;

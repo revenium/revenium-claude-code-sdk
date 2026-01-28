@@ -51,16 +51,20 @@ function createTestPayload(sessionId, options) {
             value: { stringValue: options.email },
         });
     }
-    if (options?.organizationId) {
+    // Support both new (organizationName) and old (organizationId) field names with fallback
+    const organizationValue = options?.organizationName || options?.organizationId;
+    if (organizationValue) {
         logAttributes.push({
             key: "organization.name",
-            value: { stringValue: options.organizationId },
+            value: { stringValue: organizationValue },
         });
     }
-    if (options?.productId) {
+    // Support both new (productName) and old (productId) field names with fallback
+    const productValue = options?.productName || options?.productId;
+    if (productValue) {
         logAttributes.push({
             key: "product.name",
-            value: { stringValue: options.productId },
+            value: { stringValue: productValue },
         });
     }
     // Build resource attributes (only service.name needed here)

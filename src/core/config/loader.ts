@@ -165,12 +165,13 @@ export async function loadConfig(): Promise<ReveniumConfig | null> {
     const resourceAttrs = parseOtelResourceAttributes(resourceAttrsStr);
 
     // Support both .name (preferred) and .id (legacy), with fallback to standalone vars
-    const organizationId =
+    // Priority: organizationName > organizationId > organization.name > organization.id > env var
+    const organizationName =
       resourceAttrs["organization.name"] ||
       resourceAttrs["organization.id"] ||
       env[ENV_VARS.ORGANIZATION_ID];
 
-    const productId =
+    const productName =
       resourceAttrs["product.name"] ||
       resourceAttrs["product.id"] ||
       env[ENV_VARS.PRODUCT_ID];
@@ -186,8 +187,10 @@ export async function loadConfig(): Promise<ReveniumConfig | null> {
         costMultiplierOverride !== undefined && !isNaN(costMultiplierOverride)
           ? costMultiplierOverride
           : undefined,
-      organizationId,
-      productId,
+      organizationName,
+      organizationId: organizationName, // Keep for backward compatibility
+      productName,
+      productId: productName, // Keep for backward compatibility
     };
   } catch {
     return null;

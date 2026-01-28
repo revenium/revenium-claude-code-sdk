@@ -279,7 +279,10 @@ function toUnixNano(timestamp) {
     return (BigInt(ms) * BigInt(1_000_000)).toString();
 }
 function createOtlpPayload(records, options) {
-    const { costMultiplier, email, organizationId, productId } = options;
+    const { costMultiplier, email, organizationName, organizationId, productName, productId, } = options;
+    // Support both new and old field names with fallback
+    const organizationValue = organizationName || organizationId;
+    const productValue = productName || productId;
     // Filter and map records, skipping any with invalid timestamps
     const logRecords = records
         .map((record) => {
@@ -323,16 +326,16 @@ function createOtlpPayload(records, options) {
         if (email) {
             attributes.push({ key: "user.email", value: { stringValue: email } });
         }
-        if (organizationId) {
+        if (organizationValue) {
             attributes.push({
                 key: "organization.name",
-                value: { stringValue: organizationId },
+                value: { stringValue: organizationValue },
             });
         }
-        if (productId) {
+        if (productValue) {
             attributes.push({
                 key: "product.name",
-                value: { stringValue: productId },
+                value: { stringValue: productValue },
             });
         }
         return {
@@ -526,8 +529,8 @@ async function backfillCommand(options = {}, deps = {}) {
             const samplePayload = createOtlpPayload(sampleRecords, {
                 costMultiplier,
                 email: config.email,
-                organizationId: config.organizationId,
-                productId: config.productId,
+                organizationName: config.organizationName || config.organizationId,
+                productName: config.productName || config.productId,
             });
             console.log(chalk_1.default.dim(JSON.stringify(samplePayload, null, 2)));
         }
@@ -548,8 +551,8 @@ async function backfillCommand(options = {}, deps = {}) {
         const payload = createOtlpPayload(batch, {
             costMultiplier,
             email: config.email,
-            organizationId: config.organizationId,
-            productId: config.productId,
+            organizationName: config.organizationName || config.organizationId,
+            productName: config.productName || config.productId,
         });
         sendSpinner.text = `Sending batch ${batchNumber}/${totalBatches}...`;
         const result = await sendBatch(config.endpoint, config.apiKey, payload, maxRetries, verbose);

@@ -398,7 +398,15 @@ export function toUnixNano(timestamp: string): string | null {
 export interface PayloadOptions {
   costMultiplier: number;
   email?: string;
+  organizationName?: string;
+  /**
+   * @deprecated Use organizationName instead. This field will be removed in a future version.
+   */
   organizationId?: string;
+  productName?: string;
+  /**
+   * @deprecated Use productName instead. This field will be removed in a future version.
+   */
   productId?: string;
 }
 
@@ -406,7 +414,18 @@ export function createOtlpPayload(
   records: ParsedRecord[],
   options: PayloadOptions,
 ): OTLPLogsPayload {
-  const { costMultiplier, email, organizationId, productId } = options;
+  const {
+    costMultiplier,
+    email,
+    organizationName,
+    organizationId,
+    productName,
+    productId,
+  } = options;
+
+  // Support both new and old field names with fallback
+  const organizationValue = organizationName || organizationId;
+  const productValue = productName || productId;
 
   // Filter and map records, skipping any with invalid timestamps
   const logRecords = records
@@ -456,16 +475,16 @@ export function createOtlpPayload(
       if (email) {
         attributes.push({ key: "user.email", value: { stringValue: email } });
       }
-      if (organizationId) {
+      if (organizationValue) {
         attributes.push({
           key: "organization.name",
-          value: { stringValue: organizationId },
+          value: { stringValue: organizationValue },
         });
       }
-      if (productId) {
+      if (productValue) {
         attributes.push({
           key: "product.name",
-          value: { stringValue: productId },
+          value: { stringValue: productValue },
         });
       }
 
@@ -744,8 +763,8 @@ export async function backfillCommand(
       const samplePayload = createOtlpPayload(sampleRecords, {
         costMultiplier,
         email: config.email,
-        organizationId: config.organizationId,
-        productId: config.productId,
+        organizationName: config.organizationName || config.organizationId,
+        productName: config.productName || config.productId,
       });
       console.log(chalk.dim(JSON.stringify(samplePayload, null, 2)));
     }
@@ -770,8 +789,8 @@ export async function backfillCommand(
     const payload = createOtlpPayload(batch, {
       costMultiplier,
       email: config.email,
-      organizationId: config.organizationId,
-      productId: config.productId,
+      organizationName: config.organizationName || config.organizationId,
+      productName: config.productName || config.productId,
     });
 
     sendSpinner.text = `Sending batch ${batchNumber}/${totalBatches}...`;

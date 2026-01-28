@@ -33,4 +33,3 @@ export function generateTransactionId(components: TransactionIdComponents): stri
     .digest('hex')
     .substring(0, 32);
 }
-
