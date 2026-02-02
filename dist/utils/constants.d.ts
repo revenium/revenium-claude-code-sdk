@@ -37,8 +37,8 @@ export declare const SUBSCRIPTION_TIER_CONFIG: {
         readonly multiplier: 0.08;
     };
     readonly team_premium: {
-        readonly name: "Team Premium (~$150 USD/seat or local equivalent)";
-        readonly multiplier: 0.24;
+        readonly name: "Team Premium (~$125 USD/seat or local equivalent)";
+        readonly multiplier: 0.2;
     };
     readonly enterprise: {
         readonly name: "Enterprise (custom)";

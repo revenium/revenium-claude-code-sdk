@@ -177,7 +177,7 @@ The setup wizard creates `~/.claude/revenium.env` with the following environment
 | Pro                   | $20/mo        | 0.16            | 84%                |
 | Max 5x                | $100/mo       | 0.16            | 84%                |
 | Max 20x               | $200/mo       | 0.08            | 92%                |
-| Team Premium          | $150/seat     | 0.24            | 76%                |
+| Team Premium          | $125/seat     | 0.20            | 80%                |
 | Enterprise            | Custom        | 0.05            | 95%                |
 | API (no subscription) | Pay-per-token | 1.0             | 0%                 |
 
@@ -194,7 +194,7 @@ Using this baseline, other tiers are calculated:
 - **Pro**: $20 for X tokens → $20 / $125 = 0.16 (84% discount)
 - **Max 5x**: $100 for 5X tokens → $100 / $625 = 0.16 (84% discount)
 - **Max 20x**: $200 for 20X tokens → $200 / $2,500 = 0.08 (92% discount - best value per dollar)
-- **Team Premium**: $150 for 5X tokens → $150 / $625 = 0.24 (76% discount)
+- **Team Premium**: $125 for 5X tokens → $125 / $625 = 0.20 (80% discount)
 - **Enterprise**: Custom pricing with negotiated discounts = 0.05 (95% discount)
 
 **Key Insight:** Higher tiers provide better value per dollar. Max 20x offers 4x the usage of Max 5x for only 2x the cost, resulting in a better discount (92% vs 84%).
