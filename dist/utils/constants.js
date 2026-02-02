@@ -41,8 +41,8 @@ exports.SUBSCRIPTION_TIER_CONFIG = {
         multiplier: 0.08, // $200 / $2,500 API equivalent = 8% (baseline from real data)
     },
     team_premium: {
-        name: 'Team Premium (~$150 USD/seat or local equivalent)',
-        multiplier: 0.24, // $150 / $625 API equivalent = 24%
+        name: 'Team Premium (~$125 USD/seat or local equivalent)',
+        multiplier: 0.20, // $125 / $625 API equivalent = 20%
     },
     enterprise: {
         name: 'Enterprise (custom)',

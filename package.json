@@ -1,6 +1,6 @@
 {
   "name": "@revenium/claude-code-metering",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "CLI tool to configure Claude Code telemetry export to Revenium",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
