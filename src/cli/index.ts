@@ -5,13 +5,19 @@ import { setupCommand } from "./commands/setup.js";
 import { statusCommand } from "./commands/status.js";
 import { testCommand } from "./commands/test.js";
 import { backfillCommand } from "./commands/backfill.js";
+import { readFileSync } from "fs";
+import { resolve } from "path";
+
+const packageJson = JSON.parse(
+  readFileSync(resolve(__dirname, "../../package.json"), "utf-8"),
+);
 
 export const program = new Command();
 
 program
   .name("revenium-metering")
   .description("Configure Claude Code telemetry export to Revenium")
-  .version("0.1.1");
+  .version(packageJson.version);
 
 program
   .command("setup")
