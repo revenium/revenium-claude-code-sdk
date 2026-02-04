@@ -7,11 +7,14 @@ const setup_js_1 = require("./commands/setup.js");
 const status_js_1 = require("./commands/status.js");
 const test_js_1 = require("./commands/test.js");
 const backfill_js_1 = require("./commands/backfill.js");
+const fs_1 = require("fs");
+const path_1 = require("path");
+const packageJson = JSON.parse((0, fs_1.readFileSync)((0, path_1.resolve)(__dirname, "../../package.json"), "utf-8"));
 exports.program = new commander_1.Command();
 exports.program
     .name("revenium-metering")
     .description("Configure Claude Code telemetry export to Revenium")
-    .version("0.1.3");
+    .version(packageJson.version);
 exports.program
     .command("setup")
     .description("Interactive setup wizard to configure Claude Code metering")
