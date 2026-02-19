@@ -1,7 +1,7 @@
 # @revenium/claude-code-metering
 
-[![CI](https://github.com/revenium/revenium-claude-code-sdk-internal/actions/workflows/ci.yml/badge.svg)](https://github.com/revenium/revenium-claude-code-sdk-internal/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-92.77%25-brightgreen)](https://github.com/revenium/revenium-claude-code-sdk-internal)
+[![CI](https://github.com/revenium/revenium-claude-code-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/revenium/revenium-claude-code-sdk/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-92.77%25-brightgreen)](https://github.com/revenium/revenium-claude-code-sdk)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -281,6 +281,60 @@ Claude Code exports the following data points:
 - Cache read/creation tokens
 - Request timestamps
 
+## Tool Metering
+
+Track execution of custom tools and external API calls with automatic timing, error handling, and metadata collection.
+
+### Quick Example
+
+```typescript
+import { meterTool, setToolContext } from "@revenium/claude-code-metering";
+
+// Set context once (propagates to all tool calls)
+setToolContext({
+  sessionId: "session-123",
+  userId: "user-456"
+});
+
+// Wrap tool execution
+const result = await meterTool("weather-api", async () => {
+  return await fetch("https://api.example.com/weather");
+}, {
+  description: "Fetch weather forecast",
+  category: "external-api",
+  outputFields: ["temperature", "humidity"]
+});
+// Automatically extracts temperature & humidity from result
+```
+
+### Functions
+
+**meterTool(toolId, fn, metadata?)**
+- Wraps a function with automatic metering
+- Captures duration, success/failure, and errors
+- Returns function result unchanged
+
+**reportToolCall(toolId, report)**
+- Manually report a tool call that was already executed
+- Useful when wrapping isn't possible
+
+**Context Management**
+- `setToolContext(ctx)` - Set context for all subsequent tool calls
+- `getToolContext()` - Get current context
+- `clearToolContext()` - Clear context
+- `runWithToolContext(ctx, fn)` - Run function with scoped context
+
+### Metadata Options
+
+| Field | Description |
+|-------|-------------|
+| `description` | Human-readable tool description |
+| `category` | Tool category (e.g., "external-api", "database") |
+| `version` | Tool version identifier |
+| `tags` | Array of tags for classification |
+| `outputFields` | Array of field names to auto-extract from result |
+| `usageMetadata` | Custom metrics (e.g., tokens, results count) |
+
 ## Manual Configuration
 
 If automatic shell profile update fails, add this line to your shell profile:
@@ -453,6 +507,6 @@ MIT
 
 ## Support
 
-- Issues: https://github.com/revenium/revenium-claude-code-sdk-internal/issues
+- Issues: https://github.com/revenium/revenium-claude-code-sdk/issues
 - Documentation: https://docs.revenium.ai
 - Dashboard: https://app.revenium.ai

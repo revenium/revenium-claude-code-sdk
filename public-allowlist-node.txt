@@ -1,0 +1,7 @@
+src/
+docs/
+package.json
+tsconfig.json
+.gitignore
+README.md
+public-allowlist-node.txt

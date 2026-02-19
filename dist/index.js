@@ -24,4 +24,6 @@ __exportStar(require("./core/config/writer.js"), exports);
 __exportStar(require("./core/config/validator.js"), exports);
 __exportStar(require("./core/api/client.js"), exports);
 __exportStar(require("./core/shell/detector.js"), exports);
+__exportStar(require("./core/tool-context.js"), exports);
+__exportStar(require("./core/tool-tracker.js"), exports);
 //# sourceMappingURL=index.js.map

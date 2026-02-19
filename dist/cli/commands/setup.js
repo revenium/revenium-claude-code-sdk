@@ -176,7 +176,9 @@ function printSuccessMessage(config) {
     console.log("  1. Restart your terminal or run:");
     console.log(chalk_1.default.cyan("     source ~/.claude/revenium.env"));
     console.log("  2. Start using Claude Code - telemetry will be sent automatically");
-    console.log("  3. Check your usage at https://app.revenium.ai");
+    console.log("  3. Import past usage by running: " +
+        chalk_1.default.cyan("revenium-metering backfill"));
+    console.log("  4. Check your usage at https://app.revenium.ai");
     console.log("\n" +
         chalk_1.default.dim("Run `revenium-metering status` to verify the configuration at any time."));
 }
