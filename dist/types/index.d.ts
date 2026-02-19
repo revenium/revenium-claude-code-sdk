@@ -98,4 +98,5 @@ export interface OTLPResponse {
     processedEvents: number;
     created: string;
 }
+export * from "./tool-metering.js";
 //# sourceMappingURL=index.d.ts.map

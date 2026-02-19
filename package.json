@@ -35,12 +35,6 @@
     "url": "https://github.com/revenium/revenium-claude-code-sdk/issues"
   },
   "homepage": "https://github.com/revenium/revenium-claude-code-sdk#readme",
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE",
-    "CHANGELOG.md"
-  ],
   "engines": {
     "node": ">=20.0.0"
   },

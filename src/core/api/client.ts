@@ -16,6 +16,9 @@ export async function sendOtlpLogs(
   const fullEndpoint = getFullOtlpEndpoint(baseEndpoint);
   const url = `${fullEndpoint}/v1/logs`;
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10_000);
+
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -23,7 +26,8 @@ export async function sendOtlpLogs(
       "x-api-key": apiKey,
     },
     body: JSON.stringify(payload),
-  });
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timeoutId));
 
   if (!response.ok) {
     const errorText = await response.text();

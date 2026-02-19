@@ -239,7 +239,11 @@ function printSuccessMessage(config: ReveniumConfig): void {
   console.log(
     "  2. Start using Claude Code - telemetry will be sent automatically"
   );
-  console.log("  3. Check your usage at https://app.revenium.ai");
+  console.log(
+    "  3. Import past usage by running: " +
+      chalk.cyan("revenium-metering backfill")
+  );
+  console.log("  4. Check your usage at https://app.revenium.ai");
 
   console.log(
     "\n" +
