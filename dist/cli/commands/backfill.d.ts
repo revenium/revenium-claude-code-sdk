@@ -94,17 +94,12 @@ export declare function toUnixNano(timestamp: string): string | null;
  * Filters out records with invalid timestamps as a safety measure.
  */
 export interface PayloadOptions {
-    costMultiplier: number;
     email?: string;
     organizationName?: string;
-    /**
-     * @deprecated Use organizationName instead. This field will be removed in a future version.
-     */
+    /** Alias for organizationName — accepted for backward compatibility */
     organizationId?: string;
     productName?: string;
-    /**
-     * @deprecated Use productName instead. This field will be removed in a future version.
-     */
+    /** Alias for productName — accepted for backward compatibility */
     productId?: string;
 }
 export declare function createOtlpPayload(records: ParsedRecord[], options: PayloadOptions): OTLPLogsPayload;

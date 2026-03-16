@@ -154,18 +154,11 @@ export async function loadConfig(): Promise<ReveniumConfig | null> {
       return null;
     }
 
-    // Parse cost multiplier override if present
-    const costMultiplierStr = env[ENV_VARS.COST_MULTIPLIER];
-    const costMultiplierOverride = costMultiplierStr
-      ? parseFloat(costMultiplierStr)
-      : undefined;
-
     // Parse OTEL_RESOURCE_ATTRIBUTES for org/product (primary source)
     const resourceAttrsStr = env["OTEL_RESOURCE_ATTRIBUTES"] || "";
     const resourceAttrs = parseOtelResourceAttributes(resourceAttrsStr);
 
-    // Support both .name (preferred) and .id (legacy), with fallback to standalone vars
-    // Priority: organizationName > organizationId > organization.name > organization.id > env var
+    // Read organization/product from resource attributes or standalone env vars (backward compat)
     const organizationName =
       resourceAttrs["organization.name"] ||
       resourceAttrs["organization.id"] ||
@@ -180,17 +173,20 @@ export async function loadConfig(): Promise<ReveniumConfig | null> {
       apiKey,
       endpoint: extractBaseEndpoint(fullEndpoint),
       email: env[ENV_VARS.SUBSCRIBER_EMAIL],
-      subscriptionTier: env[ENV_VARS.SUBSCRIPTION] as
+      subscriptionTier: (env[ENV_VARS.SUBSCRIPTION_TIER] || env[ENV_VARS.SUBSCRIPTION]) as
         | SubscriptionTier
         | undefined,
-      costMultiplierOverride:
-        costMultiplierOverride !== undefined && !isNaN(costMultiplierOverride)
-          ? costMultiplierOverride
-          : undefined,
       organizationName,
-      organizationId: organizationName, // Keep for backward compatibility
+      organizationId: organizationName,
       productName,
-      productId: productName, // Keep for backward compatibility
+      productId: productName,
+      // Boolean env var: '1'->true, '0'->false, absent->undefined
+      // IMPORTANT: do NOT use Boolean(env[...]) — that makes '0' truthy
+      extraUsageEnabled: env[ENV_VARS.EXTRA_USAGE_ENABLED] === '1'
+        ? true
+        : env[ENV_VARS.EXTRA_USAGE_ENABLED] === '0'
+        ? false
+        : undefined,
     };
   } catch {
     return null;

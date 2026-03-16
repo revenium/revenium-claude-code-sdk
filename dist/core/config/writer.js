@@ -12,7 +12,9 @@ const loader_js_1 = require("./loader.js");
  * Wraps the value in double quotes and escapes special characters.
  */
 function escapeShellValue(value) {
-    return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\$/g, "\\$").replace(/`/g, "\\`")}"`;
+    // Strip newlines/carriage returns to prevent multi-line injection into the env file
+    const sanitized = value.replace(/[\r\n]/g, "");
+    return `"${sanitized.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\$/g, "\\$").replace(/`/g, "\\`")}"`;
 }
 /**
  * Escapes a value for use in OTEL_RESOURCE_ATTRIBUTES.
@@ -21,8 +23,12 @@ function escapeShellValue(value) {
  * We URL-encode these characters to ensure safe parsing.
  */
 function escapeResourceAttributeValue(value) {
-    return value
-        .replace(/%/g, "%25") // Escape % first to avoid double-encoding
+    const sanitized = value.replace(/[\r\n]/g, "");
+    return sanitized
+        .replace(/%/g, "%25")
+        .replace(/\\/g, "%5C")
+        .replace(/\$/g, "%24")
+        .replace(/`/g, "%60")
         .replace(/,/g, "%2C")
         .replace(/=/g, "%3D")
         .replace(/"/g, "%22");
@@ -67,36 +73,42 @@ function generateEnvContent(config) {
         lines.push(`export ${constants_js_1.ENV_VARS.SUBSCRIBER_EMAIL}=${escapeShellValue(config.email)}`);
     }
     if (config.subscriptionTier) {
-        const tier = config.subscriptionTier;
-        const costMultiplier = config.costMultiplierOverride ?? (0, constants_js_1.getCostMultiplier)(tier);
-        const discountPercent = Math.round((1 - costMultiplier) * 100);
         lines.push("");
         lines.push("# Claude Code subscription tier");
+        lines.push(`export ${constants_js_1.ENV_VARS.SUBSCRIPTION_TIER}=${escapeShellValue(config.subscriptionTier)}`);
         lines.push(`export ${constants_js_1.ENV_VARS.SUBSCRIPTION}=${escapeShellValue(config.subscriptionTier)}`);
-        lines.push("");
-        lines.push("# Cost multiplier for subscription tier");
-        lines.push("# This adjusts Claude Code costs based on your subscription discount");
-        lines.push(`# ${tier}: ${discountPercent}% discount vs API rates`);
-        if (config.costMultiplierOverride !== undefined) {
-            lines.push("# (custom override applied)");
-            lines.push(`export ${constants_js_1.ENV_VARS.COST_MULTIPLIER}=${costMultiplier}`);
-        }
-        // Build OTEL_RESOURCE_ATTRIBUTES with cost_multiplier and optional organization.name/product.name.
+        // Build OTEL_RESOURCE_ATTRIBUTES with subscription_tier and optional organization.name/product.name.
         // Special characters (,=") in values are URL-encoded to ensure safe parsing.
         // Note: The backend ONLY reads organization.name and product.name from resourceAttributes,
         // ignoring any auto-generated values in log record attributes from Claude Code.
-        const resourceAttrs = [`cost_multiplier=${costMultiplier}`];
-        // Support both new (organizationName) and old (organizationId) field names with fallback
+        const resourceAttrs = [];
         const organizationValue = config.organizationName || config.organizationId;
         if (organizationValue) {
             resourceAttrs.push(`organization.name=${escapeResourceAttributeValue(organizationValue)}`);
         }
-        // Support both new (productName) and old (productId) field names with fallback
         const productValue = config.productName || config.productId;
         if (productValue) {
             resourceAttrs.push(`product.name=${escapeResourceAttributeValue(productValue)}`);
         }
+        resourceAttrs.push(`${constants_js_1.ENV_VARS.SUBSCRIPTION_TIER}=${escapeResourceAttributeValue(config.subscriptionTier)}`);
+        if (config.email) {
+            resourceAttrs.push(`user.email=${escapeResourceAttributeValue(config.email)}`);
+        }
         lines.push(`export OTEL_RESOURCE_ATTRIBUTES="${resourceAttrs.join(",")}"`);
+    }
+    else if (config.email) {
+        // No subscriptionTier, but email is set — still embed in OTEL_RESOURCE_ATTRIBUTES
+        // so every OTEL event carries the identity as a resource attribute.
+        const resourceAttrs = [];
+        resourceAttrs.push(`user.email=${escapeResourceAttributeValue(config.email)}`);
+        lines.push("");
+        lines.push("# OTEL resource attributes for identity");
+        lines.push(`export OTEL_RESOURCE_ATTRIBUTES="${resourceAttrs.join(",")}"`);
+    }
+    if (config.extraUsageEnabled !== undefined) {
+        lines.push("");
+        lines.push("# Whether extra usage beyond subscription limits is enabled");
+        lines.push(`export ${constants_js_1.ENV_VARS.EXTRA_USAGE_ENABLED}=${config.extraUsageEnabled ? '1' : '0'}`);
     }
     // Add advanced configuration section
     lines.push("");
@@ -111,11 +123,7 @@ function generateEnvContent(config) {
     lines.push("# HOW TO CONFIGURE:");
     lines.push("# Edit the OTEL_RESOURCE_ATTRIBUTES line above to include organization.name and/or product.name:");
     lines.push("#");
-    // Get current cost multiplier for the example
-    const exampleMultiplier = config.subscriptionTier && config.costMultiplierOverride === undefined
-        ? (0, constants_js_1.getCostMultiplier)(config.subscriptionTier)
-        : (config.costMultiplierOverride ?? "0.08");
-    lines.push(`#   OTEL_RESOURCE_ATTRIBUTES="cost_multiplier=${exampleMultiplier},organization.name=my-org,product.name=my-product"`);
+    lines.push(`#   OTEL_RESOURCE_ATTRIBUTES="organization.name=my-org,product.name=my-product"`);
     lines.push("#");
     lines.push("# ATTRIBUTE DESCRIPTIONS:");
     lines.push("#   organization.name - Attribute costs to a customer/company (e.g., client name, team)");

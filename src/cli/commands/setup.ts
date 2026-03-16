@@ -29,6 +29,7 @@ interface SetupOptions {
   organizationId?: string;
   productId?: string;
   skipShellUpdate?: boolean;
+  extraUsageEnabled?: boolean;
 }
 
 /**
@@ -121,7 +122,7 @@ export async function setupCommand(options: SetupOptions = {}): Promise<void> {
 }
 
 async function collectConfiguration(
-  options: SetupOptions
+  options: SetupOptions,
 ): Promise<ReveniumConfig> {
   const answers = await inquirer.prompt([
     {
@@ -209,6 +210,7 @@ async function collectConfiguration(
     endpoint,
     organizationId: options.organizationId,
     productId: options.productId,
+    extraUsageEnabled: options.extraUsageEnabled,
   };
 }
 

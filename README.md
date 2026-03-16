@@ -13,7 +13,7 @@ This package configures Claude Code CLI to export OpenTelemetry (OTLP) telemetry
 
 - **Usage Tracking**: Monitor Claude Code API calls, token counts, and model usage
 - **Cost Attribution**: Track AI spend per developer, team, or project
-- **Subscription Optimization**: Apply subscription discounts (Pro/Max/Enterprise) to cost calculations
+- **Subscription Optimization**: Subscription tier is sent to Revenium for automatic cost adjustment
 
 ## Installation
 
@@ -155,7 +155,7 @@ revenium-metering backfill
 1. Scans `~/.claude/projects/` for JSONL session files
 2. Extracts usage records (model, tokens, timestamps) from assistant messages
 3. Batches records and sends them to Revenium's OTLP endpoint
-4. Applies your configured subscription tier's cost multiplier
+4. Uses your configured subscription tier for cost attribution
 
 ## Configuration
 
@@ -168,66 +168,20 @@ The setup wizard creates `~/.claude/revenium.env` with the following environment
 | `OTEL_EXPORTER_OTLP_HEADERS`   | Authentication header with API key                                                 |
 | `OTEL_EXPORTER_OTLP_PROTOCOL`  | OTLP protocol (`http/json`)                                                        |
 | `OTEL_LOGS_EXPORTER`           | **Required** - Set to `otlp` to enable log export                                  |
-| `OTEL_RESOURCE_ATTRIBUTES`     | Comma-separated key=value pairs (cost_multiplier, organization.name, product.name) |
+| `OTEL_RESOURCE_ATTRIBUTES`     | Comma-separated key=value pairs (subscription_tier, user.email, organization.name, product.name) |
 
 ### Subscription Tiers
 
-| Tier                  | Monthly Cost  | Cost Multiplier | Effective Discount |
-| --------------------- | ------------- | --------------- | ------------------ |
-| Pro                   | $20/mo        | 0.16            | 84%                |
-| Max 5x                | $100/mo       | 0.16            | 84%                |
-| Max 20x               | $200/mo       | 0.08            | 92%                |
-| Team Premium          | $125/seat     | 0.20            | 80%                |
-| Enterprise            | Custom        | 0.05            | 95%                |
-| API (no subscription) | Pay-per-token | 1.0             | 0%                 |
+| Tier                  | Monthly Cost  | Tier Key         |
+| --------------------- | ------------- | ---------------- |
+| Pro                   | $20/mo        | `pro`            |
+| Max 5x                | $100/mo       | `max_5x`         |
+| Max 20x               | $200/mo       | `max_20x`        |
+| Team Premium          | $125/seat     | `team_premium`   |
+| Enterprise            | Custom        | `enterprise`     |
+| API (no subscription) | Pay-per-token | `api`            |
 
-#### How Cost Multipliers Are Calculated
-
-The cost multiplier represents the effective cost as a percentage of API pricing. These values are **estimates based on fully consuming the monthly token allotment** for each tier compared to API costs for the same usage.
-
-**Calculation Basis:** The Max 20x tier provides real usage data as the baseline.
-
-- Max 20x: $200 for 20X tokens → $2,500 API equivalent → **$125 per X tokens** at API rates
-
-Using this baseline, other tiers are calculated:
-
-- **Pro**: $20 for X tokens → $20 / $125 = 0.16 (84% discount)
-- **Max 5x**: $100 for 5X tokens → $100 / $625 = 0.16 (84% discount)
-- **Max 20x**: $200 for 20X tokens → $200 / $2,500 = 0.08 (92% discount - best value per dollar)
-- **Team Premium**: $125 for 5X tokens → $125 / $625 = 0.20 (80% discount)
-- **Enterprise**: Custom pricing with negotiated discounts = 0.05 (95% discount)
-
-**Key Insight:** Higher tiers provide better value per dollar. Max 20x offers 4x the usage of Max 5x for only 2x the cost, resulting in a better discount (92% vs 84%).
-
-#### Manual Cost Multiplier Override
-
-If you want to use a custom cost multiplier instead of the tier defaults, you can manually edit `~/.claude/revenium.env` after running setup:
-
-1. Run the setup wizard first:
-
-   ```bash
-   revenium-metering setup
-   ```
-
-2. Edit `~/.claude/revenium.env` and add/modify the cost multiplier:
-
-   ```bash
-   # Add this line with your custom multiplier (e.g., 0.12 for 88% discount)
-   export CLAUDE_CODE_COST_MULTIPLIER=0.12
-   ```
-
-3. Update the `OTEL_RESOURCE_ATTRIBUTES` line to use your custom value:
-
-   ```bash
-   export OTEL_RESOURCE_ATTRIBUTES="cost_multiplier=0.12"
-   ```
-
-4. Reload your environment:
-   ```bash
-   source ~/.claude/revenium.env
-   ```
-
-This allows you to set custom discount rates based on negotiated pricing or internal cost allocation policies.
+The subscription tier is sent as an OTEL resource attribute (`CLAUDE_CODE_SUBSCRIPTION_TIER`). The Revenium backend uses this to apply the appropriate cost adjustments automatically — no client-side multiplier configuration is needed.
 
 ### Organization & Product Attribution
 
@@ -253,10 +207,10 @@ Add `organization.name` and/or `product.name` to the `OTEL_RESOURCE_ATTRIBUTES` 
 
 ```bash
 # Before:
-export OTEL_RESOURCE_ATTRIBUTES="cost_multiplier=0.08"
+export OTEL_RESOURCE_ATTRIBUTES="CLAUDE_CODE_SUBSCRIPTION_TIER=max_20x,user.email=dev@company.com"
 
 # After:
-export OTEL_RESOURCE_ATTRIBUTES="cost_multiplier=0.08,organization.name=engineering,product.name=backend-api"
+export OTEL_RESOURCE_ATTRIBUTES="organization.name=engineering,product.name=backend-api,CLAUDE_CODE_SUBSCRIPTION_TIER=max_20x,user.email=dev@company.com"
 ```
 
 Then reload: `source ~/.claude/revenium.env`
@@ -377,12 +331,12 @@ Add to your `settings.json` (use `terminal.integrated.env.windows` or `.linux` a
     "OTEL_EXPORTER_OTLP_ENDPOINT": "https://api.revenium.ai/meter/v2/otlp",
     "OTEL_EXPORTER_OTLP_HEADERS": "x-api-key=hak_YOUR_API_KEY_HERE",
     "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
-    "OTEL_RESOURCE_ATTRIBUTES": "cost_multiplier=0.08,organization.name=my-org,product.name=my-product"
+    "OTEL_RESOURCE_ATTRIBUTES": "organization.name=my-org,product.name=my-product,CLAUDE_CODE_SUBSCRIPTION_TIER=max_20x,user.email=dev@company.com"
   }
 }
 ```
 
-> **Note**: Include `organization.name` and `product.name` in `OTEL_RESOURCE_ATTRIBUTES` if you want cost attribution. See [Organization & Product Attribution](#organization--product-attribution).
+> **Note**: Include `organization.name` and `product.name` in `OTEL_RESOURCE_ATTRIBUTES` if you want cost attribution. Replace the subscription tier and email with your actual values. See [Organization & Product Attribution](#organization--product-attribution).
 
 **Tip:** Run `revenium-metering setup` first, then copy the values from `~/.claude/revenium.env`.
 
@@ -401,9 +355,9 @@ Configure these environment variables in your IDE's terminal settings:
 | `OTEL_EXPORTER_OTLP_ENDPOINT`  | `https://api.revenium.ai/meter/v2/otlp`                                 |
 | `OTEL_EXPORTER_OTLP_HEADERS`   | `x-api-key=hak_YOUR_API_KEY`                                            |
 | `OTEL_EXPORTER_OTLP_PROTOCOL`  | `http/json`                                                             |
-| `OTEL_RESOURCE_ATTRIBUTES`     | `cost_multiplier=0.08,organization.name=my-org,product.name=my-product` |
+| `OTEL_RESOURCE_ATTRIBUTES`     | `organization.name=my-org,product.name=my-product,CLAUDE_CODE_SUBSCRIPTION_TIER=max_20x,user.email=dev@company.com` |
 
-See [Subscription Tiers](#subscription-tiers) for cost multiplier values and [Organization & Product Attribution](#organization--product-attribution) for attribution options.
+See [Subscription Tiers](#subscription-tiers) for tier keys and [Organization & Product Attribution](#organization--product-attribution) for attribution options.
 
 ## Troubleshooting
 

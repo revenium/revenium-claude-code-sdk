@@ -49,15 +49,11 @@ export interface TestPayloadOptions {
   email?: string;
   /** Optional organization name to attribute costs to */
   organizationName?: string;
-  /**
-   * @deprecated Use organizationName instead. This field will be removed in a future version.
-   */
+  /** Alias for organizationName — accepted for backward compatibility */
   organizationId?: string;
   /** Optional product name to attribute costs to */
   productName?: string;
-  /**
-   * @deprecated Use productName instead. This field will be removed in a future version.
-   */
+  /** Alias for productName — accepted for backward compatibility */
   productId?: string;
 }
 
@@ -70,8 +66,11 @@ export function createTestPayload(
 ): OTLPLogsPayload {
   const now = Date.now() * 1_000_000; // Convert to nanoseconds
 
-  // Build log record attributes
-  // Note: organization.name and product.name go here because ClaudeCodeMapper reads from log record attrs
+  // Build log record attributes.
+  // Note: user.email is read from log record attrs by ClaudeCodeMapper.
+  // organization.name and product.name are read from resource attrs only
+  // (the backend intentionally ignores them in log record attrs to avoid
+  // Claude Code's auto-generated UUIDs polluting the org table).
   const logAttributes: Array<{ key: string; value: { stringValue: string } }> =
     [
       { key: "session.id", value: { stringValue: sessionId } },
@@ -84,20 +83,29 @@ export function createTestPayload(
       { key: "duration_ms", value: { stringValue: "0" } },
     ];
 
-  // Add optional subscriber/attribution attributes at log record level
-  // (backend ClaudeCodeMapper reads these from log record attrs, not resource attrs)
-  if (options?.email) {
+  // Add subscriber email to log record attrs — backend ClaudeCodeMapper reads user.email from here.
+  // Falls back to REVENIUM_SUBSCRIBER_EMAIL env var if not provided in options.
+  const emailValue = options?.email ?? process.env['REVENIUM_SUBSCRIBER_EMAIL'];
+  if (emailValue) {
     logAttributes.push({
       key: "user.email",
-      value: { stringValue: options.email },
+      value: { stringValue: emailValue },
     });
   }
+
+  // Build resource attributes — service.name is required for mapper detection.
+  // organization.name and product.name must be here (not in log record attrs) because
+  // the backend ClaudeCodeMapper reads them from resource attrs only.
+  const resourceAttributes: Array<{
+    key: string;
+    value: { stringValue: string };
+  }> = [{ key: "service.name", value: { stringValue: "claude-code" } }];
 
   // Support both new (organizationName) and old (organizationId) field names with fallback
   const organizationValue =
     options?.organizationName || options?.organizationId;
   if (organizationValue) {
-    logAttributes.push({
+    resourceAttributes.push({
       key: "organization.name",
       value: { stringValue: organizationValue },
     });
@@ -106,17 +114,29 @@ export function createTestPayload(
   // Support both new (productName) and old (productId) field names with fallback
   const productValue = options?.productName || options?.productId;
   if (productValue) {
-    logAttributes.push({
+    resourceAttributes.push({
       key: "product.name",
       value: { stringValue: productValue },
     });
   }
 
-  // Build resource attributes (only service.name needed here)
-  const resourceAttributes: Array<{
-    key: string;
-    value: { stringValue: string };
-  }> = [{ key: "service.name", value: { stringValue: "claude-code" } }];
+  // Parse OTEL_RESOURCE_ATTRIBUTES from environment and include in resource attrs.
+  // This ensures subscription_tier and any other resource attributes configured by the user
+  // appear in test metrics. Values are URL-decoded to reverse writer.ts URL-encoding (,=").
+  const otelResourceAttrsEnv = process.env['OTEL_RESOURCE_ATTRIBUTES'];
+  if (otelResourceAttrsEnv) {
+    for (const pair of otelResourceAttrsEnv.split(',')) {
+      const eqIdx = pair.indexOf('=');
+      if (eqIdx > 0) {
+        const key = pair.substring(0, eqIdx).trim();
+        let value = pair.substring(eqIdx + 1).trim();
+        try { value = decodeURIComponent(value); } catch { /* use raw value on decode failure */ }
+        if (key && key !== 'service.name' && key !== 'user.email') {
+          resourceAttributes.push({ key, value: { stringValue: value } });
+        }
+      }
+    }
+  }
 
   return {
     resourceLogs: [
@@ -151,6 +171,45 @@ export function generateTestSessionId(): string {
   const timestamp = Date.now().toString(36);
   const random = Math.random().toString(36).substring(2, 8);
   return `test-${timestamp}-${random}`;
+}
+
+/**
+ * Verifies an API key is accepted by the Revenium backend by calling the resolve-key endpoint.
+ * Returns true if the key is accepted (200 OK), false otherwise.
+ * Network errors and non-200 responses all return false.
+ *
+ * This function is exported as a lightweight SDK utility for programmatic callers that need
+ * to check key validity without sending a test OTLP event. The CLI setup wizard uses
+ * {@link checkEndpointHealth} instead, which validates end-to-end connectivity.
+ *
+ * @param baseEndpoint The base Revenium endpoint (e.g. "https://api.revenium.io")
+ * @param apiKey The Revenium API key (format: hak_<tenant>_<secret>)
+ * @returns true if the key is valid, false otherwise
+ */
+export async function verifyApiKey(
+  baseEndpoint: string,
+  apiKey: string,
+): Promise<boolean> {
+  try {
+    // Enforce HTTPS to prevent API key exfiltration to an attacker-controlled host
+    const parsedBase = new URL(baseEndpoint);
+    if (parsedBase.protocol !== 'https:') {
+      return false;
+    }
+    const url = parsedBase.origin + '/v2/sdk/resolve-key';
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'x-api-key': apiKey,
+      },
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 /**

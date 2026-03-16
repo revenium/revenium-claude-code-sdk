@@ -6,6 +6,7 @@ interface SetupOptions {
     organizationId?: string;
     productId?: string;
     skipShellUpdate?: boolean;
+    extraUsageEnabled?: boolean;
 }
 /**
  * Interactive setup wizard for Revenium Claude Code metering.

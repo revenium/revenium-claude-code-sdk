@@ -8,22 +8,16 @@ export interface ReveniumConfig {
   endpoint: string;
   email?: string;
   subscriptionTier?: SubscriptionTier;
-  /** Optional override for the cost multiplier (overrides tier default) */
-  costMultiplierOverride?: number;
   /** Optional organization name for attributing costs to a specific customer/company */
   organizationName?: string;
-  /**
-   * @deprecated Use organizationName instead. This field will be removed in a future version.
-   * Organization or company identifier
-   */
+  /** Alias for organizationName — accepted for backward compatibility */
   organizationId?: string;
   /** Optional product name for attributing costs to a specific product/project */
   productName?: string;
-  /**
-   * @deprecated Use productName instead. This field will be removed in a future version.
-   * Product or application identifier
-   */
+  /** Alias for productName — accepted for backward compatibility */
   productId?: string;
+  /** Whether extra usage beyond subscription limits is enabled */
+  extraUsageEnabled?: boolean;
 }
 
 /**
