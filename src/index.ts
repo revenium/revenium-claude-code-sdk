@@ -7,6 +7,7 @@ export * from './core/config/loader.js';
 export * from './core/config/writer.js';
 export * from './core/config/validator.js';
 export * from './core/api/client.js';
+export * from './core/api/rate-limiter.js';
 export * from './core/shell/detector.js';
 export * from './core/tool-context.js';
 export * from './core/tool-tracker.js';

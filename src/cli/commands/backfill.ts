@@ -8,6 +8,7 @@ import ora from "ora";
 import { loadConfig } from "../../core/config/loader.js";
 import { sendOtlpLogs } from "../../core/api/client.js";
 import { generateTransactionId } from "../../utils/hashing.js";
+import { createRateLimiterState, enforceRateLimit } from "../../core/api/rate-limiter.js";
 import type { OTLPLogsPayload } from "../../types/index.js";
 
 export interface BackfillOptions {
@@ -769,8 +770,9 @@ export async function backfillCommand(
 
   // Send data in batches
   const totalBatches = Math.ceil(allRecords.length / batchSize);
+  const rateLimiterState = createRateLimiterState();
   const sendSpinner = ora(
-    `Sending data... (0/${totalBatches} batches, ~${delay}ms delay)`,
+    `Sending data... (0/${totalBatches} batches, rate-limited to 5 TPS)`,
   ).start();
   let sentBatches = 0;
   let sentRecords = 0;
@@ -803,7 +805,7 @@ export async function backfillCommand(
     if (result.success) {
       sentBatches++;
       sentRecords += batch.length;
-      sendSpinner.text = `Sending data... (${sentBatches}/${totalBatches} batches, ~${delay}ms delay)`;
+      sendSpinner.text = `Sending data... (${sentBatches}/${totalBatches} batches, rate-limited to 5 TPS)`;
     } else {
       permanentlyFailedBatches++;
       failedBatchDetails.push({
@@ -812,10 +814,8 @@ export async function backfillCommand(
       });
     }
 
-    // Apply rate limiting delay between batches (except after the last batch)
     if (i + batchSize < allRecords.length) {
-      sendSpinner.text = `Waiting ${delay}ms before next batch...`;
-      await sleep(delay);
+      await enforceRateLimit(rateLimiterState, { batchSize: batch.length, userDelayMs: delay });
     }
   }
 

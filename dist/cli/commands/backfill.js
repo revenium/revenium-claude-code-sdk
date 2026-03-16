@@ -26,6 +26,7 @@ const ora_1 = __importDefault(require("ora"));
 const loader_js_1 = require("../../core/config/loader.js");
 const client_js_1 = require("../../core/api/client.js");
 const hashing_js_1 = require("../../utils/hashing.js");
+const rate_limiter_js_1 = require("../../core/api/rate-limiter.js");
 /**
  * Sleep for a specified number of milliseconds.
  */
@@ -542,7 +543,8 @@ async function backfillCommand(options = {}, deps = {}) {
     }
     // Send data in batches
     const totalBatches = Math.ceil(allRecords.length / batchSize);
-    const sendSpinner = (0, ora_1.default)(`Sending data... (0/${totalBatches} batches, ~${delay}ms delay)`).start();
+    const rateLimiterState = (0, rate_limiter_js_1.createRateLimiterState)();
+    const sendSpinner = (0, ora_1.default)(`Sending data... (0/${totalBatches} batches, rate-limited to 5 TPS)`).start();
     let sentBatches = 0;
     let sentRecords = 0;
     let permanentlyFailedBatches = 0;
@@ -563,7 +565,7 @@ async function backfillCommand(options = {}, deps = {}) {
         if (result.success) {
             sentBatches++;
             sentRecords += batch.length;
-            sendSpinner.text = `Sending data... (${sentBatches}/${totalBatches} batches, ~${delay}ms delay)`;
+            sendSpinner.text = `Sending data... (${sentBatches}/${totalBatches} batches, rate-limited to 5 TPS)`;
         }
         else {
             permanentlyFailedBatches++;
@@ -572,10 +574,8 @@ async function backfillCommand(options = {}, deps = {}) {
                 error: result.error || "Unknown error",
             });
         }
-        // Apply rate limiting delay between batches (except after the last batch)
         if (i + batchSize < allRecords.length) {
-            sendSpinner.text = `Waiting ${delay}ms before next batch...`;
-            await sleep(delay);
+            await (0, rate_limiter_js_1.enforceRateLimit)(rateLimiterState, { batchSize: batch.length, userDelayMs: delay });
         }
     }
     if (permanentlyFailedBatches === 0) {
