@@ -346,6 +346,25 @@ function createOtlpPayload(records, options) {
             value: { stringValue: productValue },
         });
     }
+    const existingKeys = new Set(resourceAttributes.map((a) => a.key));
+    const otelResourceAttrsEnv = process.env['OTEL_RESOURCE_ATTRIBUTES'];
+    if (otelResourceAttrsEnv) {
+        for (const pair of otelResourceAttrsEnv.split(',')) {
+            const eqIdx = pair.indexOf('=');
+            if (eqIdx > 0) {
+                const key = pair.substring(0, eqIdx).trim();
+                let value = pair.substring(eqIdx + 1).trim();
+                try {
+                    value = decodeURIComponent(value);
+                }
+                catch { /* use raw value on decode failure */ }
+                if (key && !existingKeys.has(key) && key !== 'user.email') {
+                    resourceAttributes.push({ key, value: { stringValue: value } });
+                    existingKeys.add(key);
+                }
+            }
+        }
+    }
     return {
         resourceLogs: [
             {

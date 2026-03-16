@@ -168,7 +168,7 @@ The setup wizard creates `~/.claude/revenium.env` with the following environment
 | `OTEL_EXPORTER_OTLP_HEADERS`   | Authentication header with API key                                                 |
 | `OTEL_EXPORTER_OTLP_PROTOCOL`  | OTLP protocol (`http/json`)                                                        |
 | `OTEL_LOGS_EXPORTER`           | **Required** - Set to `otlp` to enable log export                                  |
-| `OTEL_RESOURCE_ATTRIBUTES`     | Comma-separated key=value pairs (subscription_tier, user.email, organization.name, product.name) |
+| `OTEL_RESOURCE_ATTRIBUTES`     | Comma-separated key=value pairs (CLAUDE_CODE_SUBSCRIPTION_TIER, user.email, organization.name, product.name) |
 
 ### Subscription Tiers
 

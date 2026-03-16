@@ -123,6 +123,7 @@ export function createTestPayload(
   // Parse OTEL_RESOURCE_ATTRIBUTES from environment and include in resource attrs.
   // This ensures subscription_tier and any other resource attributes configured by the user
   // appear in test metrics. Values are URL-decoded to reverse writer.ts URL-encoding (,=").
+  const existingKeys = new Set(resourceAttributes.map((a) => a.key));
   const otelResourceAttrsEnv = process.env['OTEL_RESOURCE_ATTRIBUTES'];
   if (otelResourceAttrsEnv) {
     for (const pair of otelResourceAttrsEnv.split(',')) {
@@ -131,8 +132,9 @@ export function createTestPayload(
         const key = pair.substring(0, eqIdx).trim();
         let value = pair.substring(eqIdx + 1).trim();
         try { value = decodeURIComponent(value); } catch { /* use raw value on decode failure */ }
-        if (key && key !== 'service.name' && key !== 'user.email') {
+        if (key && !existingKeys.has(key) && key !== 'user.email') {
           resourceAttributes.push({ key, value: { stringValue: value } });
+          existingKeys.add(key);
         }
       }
     }
