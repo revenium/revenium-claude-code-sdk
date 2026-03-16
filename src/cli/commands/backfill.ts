@@ -7,10 +7,6 @@ import chalk from "chalk";
 import ora from "ora";
 import { loadConfig } from "../../core/config/loader.js";
 import { sendOtlpLogs } from "../../core/api/client.js";
-import {
-  getCostMultiplier,
-  type SubscriptionTier,
-} from "../../utils/constants.js";
 import { generateTransactionId } from "../../utils/hashing.js";
 import type { OTLPLogsPayload } from "../../types/index.js";
 
@@ -396,17 +392,12 @@ export function toUnixNano(timestamp: string): string | null {
  * Filters out records with invalid timestamps as a safety measure.
  */
 export interface PayloadOptions {
-  costMultiplier: number;
   email?: string;
   organizationName?: string;
-  /**
-   * @deprecated Use organizationName instead. This field will be removed in a future version.
-   */
+  /** Alias for organizationName — accepted for backward compatibility */
   organizationId?: string;
   productName?: string;
-  /**
-   * @deprecated Use productName instead. This field will be removed in a future version.
-   */
+  /** Alias for productName — accepted for backward compatibility */
   productId?: string;
 }
 
@@ -415,7 +406,6 @@ export function createOtlpPayload(
   options: PayloadOptions,
 ): OTLPLogsPayload {
   const {
-    costMultiplier,
     email,
     organizationName,
     organizationId,
@@ -470,22 +460,9 @@ export function createOtlpPayload(
         },
       ];
 
-      // Add optional subscriber/attribution attributes at log record level
-      // (backend ClaudeCodeMapper reads these from log record attrs, not resource attrs)
+      // Add subscriber email at log record level — backend ClaudeCodeMapper reads user.email from here.
       if (email) {
         attributes.push({ key: "user.email", value: { stringValue: email } });
-      }
-      if (organizationValue) {
-        attributes.push({
-          key: "organization.name",
-          value: { stringValue: organizationValue },
-        });
-      }
-      if (productValue) {
-        attributes.push({
-          key: "product.name",
-          value: { stringValue: productValue },
-        });
       }
 
       return {
@@ -496,20 +473,48 @@ export function createOtlpPayload(
     })
     .filter((record): record is NonNullable<typeof record> => record !== null);
 
+  // Build resource attributes — organization.name and product.name must be here (not in log
+  // record attrs) because the backend ClaudeCodeMapper reads them from resource attrs only.
+  const resourceAttributes: Array<{
+    key: string;
+    value: { stringValue: string };
+  }> = [{ key: "service.name", value: { stringValue: "claude-code" } }];
+
+  if (organizationValue) {
+    resourceAttributes.push({
+      key: "organization.name",
+      value: { stringValue: organizationValue },
+    });
+  }
+  if (productValue) {
+    resourceAttributes.push({
+      key: "product.name",
+      value: { stringValue: productValue },
+    });
+  }
+
+  const existingKeys = new Set(resourceAttributes.map((a) => a.key));
+  const otelResourceAttrsEnv = process.env['OTEL_RESOURCE_ATTRIBUTES'];
+  if (otelResourceAttrsEnv) {
+    for (const pair of otelResourceAttrsEnv.split(',')) {
+      const eqIdx = pair.indexOf('=');
+      if (eqIdx > 0) {
+        const key = pair.substring(0, eqIdx).trim();
+        let value = pair.substring(eqIdx + 1).trim();
+        try { value = decodeURIComponent(value); } catch { /* use raw value on decode failure */ }
+        if (key && !existingKeys.has(key) && key !== 'user.email') {
+          resourceAttributes.push({ key, value: { stringValue: value } });
+          existingKeys.add(key);
+        }
+      }
+    }
+  }
+
   return {
     resourceLogs: [
       {
         resource: {
-          attributes: [
-            {
-              key: "service.name",
-              value: { stringValue: "claude-code" },
-            },
-            {
-              key: "cost_multiplier",
-              value: { doubleValue: costMultiplier },
-            },
-          ],
+          attributes: resourceAttributes,
         },
         scopeLogs: [
           {
@@ -585,13 +590,6 @@ export async function backfillCommand(
       chalk.dim(`Filtering records since: ${sinceDate.toISOString()}\n`),
     );
   }
-
-  // Get cost multiplier (use ?? to allow explicit 0 override for free tier/testing)
-  const costMultiplier =
-    config.costMultiplierOverride ??
-    (config.subscriptionTier
-      ? getCostMultiplier(config.subscriptionTier as SubscriptionTier)
-      : 0.08);
 
   // Discover JSONL files
   const projectsDir = join(getHomedir(), ".claude", "projects");
@@ -725,7 +723,6 @@ export async function backfillCommand(
   console.log(
     `  Cache creation:       ${stats.totalCacheCreationTokens.toLocaleString()}`,
   );
-  console.log(`  Cost multiplier:      ${costMultiplier}`);
 
   if (
     verbose &&
@@ -761,7 +758,6 @@ export async function backfillCommand(
       console.log("\n" + chalk.dim("Sample OTLP payload (first batch):"));
       const sampleRecords = allRecords.slice(0, Math.min(batchSize, 3));
       const samplePayload = createOtlpPayload(sampleRecords, {
-        costMultiplier,
         email: config.email,
         organizationName: config.organizationName || config.organizationId,
         productName: config.productName || config.productId,
@@ -787,7 +783,6 @@ export async function backfillCommand(
     const batchNumber = Math.floor(i / batchSize) + 1;
     const batch = allRecords.slice(i, i + batchSize);
     const payload = createOtlpPayload(batch, {
-      costMultiplier,
       email: config.email,
       organizationName: config.organizationName || config.organizationId,
       productName: config.productName || config.productId,

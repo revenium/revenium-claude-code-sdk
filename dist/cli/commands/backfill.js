@@ -25,7 +25,6 @@ const chalk_1 = __importDefault(require("chalk"));
 const ora_1 = __importDefault(require("ora"));
 const loader_js_1 = require("../../core/config/loader.js");
 const client_js_1 = require("../../core/api/client.js");
-const constants_js_1 = require("../../utils/constants.js");
 const hashing_js_1 = require("../../utils/hashing.js");
 /**
  * Sleep for a specified number of milliseconds.
@@ -279,7 +278,7 @@ function toUnixNano(timestamp) {
     return (BigInt(ms) * BigInt(1_000_000)).toString();
 }
 function createOtlpPayload(records, options) {
-    const { costMultiplier, email, organizationName, organizationId, productName, productId, } = options;
+    const { email, organizationName, organizationId, productName, productId, } = options;
     // Support both new and old field names with fallback
     const organizationValue = organizationName || organizationId;
     const productValue = productName || productId;
@@ -321,22 +320,9 @@ function createOtlpPayload(records, options) {
                 value: { intValue: record.cacheCreationTokens },
             },
         ];
-        // Add optional subscriber/attribution attributes at log record level
-        // (backend ClaudeCodeMapper reads these from log record attrs, not resource attrs)
+        // Add subscriber email at log record level — backend ClaudeCodeMapper reads user.email from here.
         if (email) {
             attributes.push({ key: "user.email", value: { stringValue: email } });
-        }
-        if (organizationValue) {
-            attributes.push({
-                key: "organization.name",
-                value: { stringValue: organizationValue },
-            });
-        }
-        if (productValue) {
-            attributes.push({
-                key: "product.name",
-                value: { stringValue: productValue },
-            });
         }
         return {
             timeUnixNano,
@@ -345,20 +331,45 @@ function createOtlpPayload(records, options) {
         };
     })
         .filter((record) => record !== null);
+    // Build resource attributes — organization.name and product.name must be here (not in log
+    // record attrs) because the backend ClaudeCodeMapper reads them from resource attrs only.
+    const resourceAttributes = [{ key: "service.name", value: { stringValue: "claude-code" } }];
+    if (organizationValue) {
+        resourceAttributes.push({
+            key: "organization.name",
+            value: { stringValue: organizationValue },
+        });
+    }
+    if (productValue) {
+        resourceAttributes.push({
+            key: "product.name",
+            value: { stringValue: productValue },
+        });
+    }
+    const existingKeys = new Set(resourceAttributes.map((a) => a.key));
+    const otelResourceAttrsEnv = process.env['OTEL_RESOURCE_ATTRIBUTES'];
+    if (otelResourceAttrsEnv) {
+        for (const pair of otelResourceAttrsEnv.split(',')) {
+            const eqIdx = pair.indexOf('=');
+            if (eqIdx > 0) {
+                const key = pair.substring(0, eqIdx).trim();
+                let value = pair.substring(eqIdx + 1).trim();
+                try {
+                    value = decodeURIComponent(value);
+                }
+                catch { /* use raw value on decode failure */ }
+                if (key && !existingKeys.has(key) && key !== 'user.email') {
+                    resourceAttributes.push({ key, value: { stringValue: value } });
+                    existingKeys.add(key);
+                }
+            }
+        }
+    }
     return {
         resourceLogs: [
             {
                 resource: {
-                    attributes: [
-                        {
-                            key: "service.name",
-                            value: { stringValue: "claude-code" },
-                        },
-                        {
-                            key: "cost_multiplier",
-                            value: { doubleValue: costMultiplier },
-                        },
-                    ],
+                    attributes: resourceAttributes,
                 },
                 scopeLogs: [
                     {
@@ -401,11 +412,6 @@ async function backfillCommand(options = {}, deps = {}) {
         }
         console.log(chalk_1.default.dim(`Filtering records since: ${sinceDate.toISOString()}\n`));
     }
-    // Get cost multiplier (use ?? to allow explicit 0 override for free tier/testing)
-    const costMultiplier = config.costMultiplierOverride ??
-        (config.subscriptionTier
-            ? (0, constants_js_1.getCostMultiplier)(config.subscriptionTier)
-            : 0.08);
     // Discover JSONL files
     const projectsDir = (0, node_path_1.join)(getHomedir(), ".claude", "projects");
     const discoverSpinner = (0, ora_1.default)("Discovering JSONL files...").start();
@@ -506,7 +512,6 @@ async function backfillCommand(options = {}, deps = {}) {
     console.log(`  Output tokens:        ${stats.totalOutputTokens.toLocaleString()}`);
     console.log(`  Cache read tokens:    ${stats.totalCacheReadTokens.toLocaleString()}`);
     console.log(`  Cache creation:       ${stats.totalCacheCreationTokens.toLocaleString()}`);
-    console.log(`  Cost multiplier:      ${costMultiplier}`);
     if (verbose &&
         (skippedLines > 0 || skippedMissingFields > 0 || skippedFiles > 0)) {
         console.log("\n" + chalk_1.default.dim("Skipped records:"));
@@ -527,7 +532,6 @@ async function backfillCommand(options = {}, deps = {}) {
             console.log("\n" + chalk_1.default.dim("Sample OTLP payload (first batch):"));
             const sampleRecords = allRecords.slice(0, Math.min(batchSize, 3));
             const samplePayload = createOtlpPayload(sampleRecords, {
-                costMultiplier,
                 email: config.email,
                 organizationName: config.organizationName || config.organizationId,
                 productName: config.productName || config.productId,
@@ -549,7 +553,6 @@ async function backfillCommand(options = {}, deps = {}) {
         const batchNumber = Math.floor(i / batchSize) + 1;
         const batch = allRecords.slice(i, i + batchSize);
         const payload = createOtlpPayload(batch, {
-            costMultiplier,
             email: config.email,
             organizationName: config.organizationName || config.organizationId,
             productName: config.productName || config.productId,

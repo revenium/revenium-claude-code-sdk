@@ -151,6 +151,7 @@ async function collectConfiguration(options) {
         endpoint,
         organizationId: options.organizationId,
         productId: options.productId,
+        extraUsageEnabled: options.extraUsageEnabled,
     };
 }
 function printSuccessMessage(config) {
